@@ -2,6 +2,7 @@
 import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
+import io
 
 st.set_page_config(page_title="Chapati Analytics", layout="wide")
 st.title("🍞 Chapati Data Analysis Agent")
@@ -38,11 +39,14 @@ if page == "📤 Upload Data":
     
     if uploaded_file is not None:
         try:
+            # Read the entire file as bytes
+            file_content = uploaded_file.read()
+            
             # Read header rows
-            header_rows = pd.read_csv(uploaded_file, header=None, nrows=3)
+            header_rows = pd.read_csv(io.BytesIO(file_content), header=None, nrows=3)
             
             # Read data starting from row 4 (index 3)
-            df = pd.read_csv(uploaded_file, header=3)
+            df = pd.read_csv(io.BytesIO(file_content), header=3)
             df.columns = df.columns.str.strip()
             
             st.session_state.data = df
@@ -52,11 +56,11 @@ if page == "📤 Upload Data":
             
             st.subheader("Header Structure")
             st.write("**Row 1 (Months):**")
-            st.write(header_rows.iloc[0].tolist()[:15])
+            st.write(header_rows.iloc[0].tolist()[:20])
             st.write("**Row 2 (Weeks):**")
-            st.write(header_rows.iloc[1].tolist()[:15])
+            st.write(header_rows.iloc[1].tolist()[:20])
             st.write("**Row 3 (Metrics):**")
-            st.write(header_rows.iloc[2].tolist()[:15])
+            st.write(header_rows.iloc[2].tolist()[:20])
             
             st.subheader("Data Preview")
             st.dataframe(df.head(20))
@@ -112,7 +116,6 @@ elif page == "📈 Store Analysis":
                 # Parse the structure: identify month boundaries and weeks
                 current_month = None
                 month_weeks = {}
-                week_info = []
                 
                 for col_idx in range(1, len(df.columns)):  # Skip first column (names)
                     month = months_row[col_idx] if col_idx < len(months_row) else None
@@ -203,7 +206,7 @@ elif page == "📈 Store Analysis":
                     fig = go.Figure()
                     fig.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Sales'], name='Sales', marker_color='green'))
                     fig.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Returns'], name='Returns', marker_color='red'))
-                    fig.update_layout(title="Weekly Sales vs Returns", barmode='group', height=400)
+                    fig.update_layout(title="Weekly Sales vs Returns", barmode='group', height=400, xaxis_tickangle=-45)
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.warning("⚠️ No data found for this branch")
