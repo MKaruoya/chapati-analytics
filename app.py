@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
 import io
-import re
 
 st.set_page_config(page_title="Chapati Analytics", layout="wide")
 st.title("🍞 Chapati Data Analysis Agent")
@@ -29,7 +28,10 @@ if page == "📤 Upload Data":
     
     st.info("""
     📋 **Expected Format:**
-    - CSV file with multi-row headers
+    - CSV file with multi-row headers (rows 1-3)
+    - Row 1: Month headers
+    - Row 2: Week numbers
+    - Row 3: Metric types (Sales/Returns)
     - Data starts from row 4
     """)
     
@@ -53,10 +55,12 @@ if page == "📤 Upload Data":
             st.success("✅ Data uploaded successfully!")
             
             st.subheader("Header Structure")
-            st.write("**Row 2 (Months & Metrics):**")
-            st.write(header_rows.iloc[1].tolist()[:25])
-            st.write("**Row 3 (Weeks):**")
-            st.write(header_rows.iloc[2].tolist()[:25])
+            st.write("**Row 1 (Months):**")
+            st.write(header_rows.iloc[0].tolist()[:30])
+            st.write("**Row 2 (Weeks):**")
+            st.write(header_rows.iloc[1].tolist()[:30])
+            st.write("**Row 3 (Metrics):**")
+            st.write(header_rows.iloc[2].tolist()[:30])
             
             st.subheader("Data Preview")
             st.dataframe(df.head(20))
@@ -90,7 +94,7 @@ elif page == "📈 Store Analysis":
         # Get unique customer/branch names
         all_names = df[first_col].dropna().unique()
         
-        # Filter for branch-level entries
+        # Filter for branch-level entries (contain "-" and not product names)
         branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
         
         if not branches:
@@ -105,54 +109,41 @@ elif page == "📈 Store Analysis":
                 st.subheader(f"Performance Analysis for {selected_branch}")
                 
                 # Extract header information
-                months_metrics_row = headers.iloc[1].tolist()
-                weeks_row = headers.iloc[2].tolist()
+                months_row = headers.iloc[0].tolist()
+                weeks_row = headers.iloc[1].tolist()
+                metrics_row = headers.iloc[2].tolist()
                 
-                # Parse the structure
-                month_weeks = {}
+                # Build week-by-week data
+                weekly_data = []
                 current_month = None
                 
                 for col_idx in range(1, len(df.columns)):  # Skip first column (names)
-                    month_metric = months_metrics_row[col_idx] if col_idx < len(months_metrics_row) else None
+                    month = months_row[col_idx] if col_idx < len(months_row) else None
                     week = weeks_row[col_idx] if col_idx < len(weeks_row) else None
+                    metric = metrics_row[col_idx] if col_idx < len(metrics_row) else None
                     
-                    # Extract month from the month_metric string
-                    if pd.notna(month_metric) and month_metric != '' and month_metric != 'NaN':
-                        # Check if it contains "Sum of"
-                        if 'Sum of' in str(month_metric):
-                            # Extract month and metric type
-                            match = re.search(r'(\d{2}\s\w+)\s(Sum of.*)', str(month_metric))
-                            if match:
-                                current_month = match.group(1)
-                                metric_type = match.group(2)
-                        else:
-                            # Just a month name
-                            current_month = month_metric
+                    # Update current month
+                    if pd.notna(month) and month != '' and str(month) != 'nan':
+                        current_month = month
                     
-                    # Create week key if we have month and week
-                    if current_month and pd.notna(week) and week != '' and week != 'NaN':
-                        week_key = f"{current_month} - W{week}"
-                        if week_key not in month_weeks:
-                            month_weeks[week_key] = {'sales_col': None, 'returns_col': None}
+                    # Process pairs (Sales, Returns)
+                    if (col_idx + 1 < len(df.columns) and 
+                        current_month and 
+                        pd.notna(week) and week != '' and str(week) != 'nan' and
+                        'Sales' in str(metric)):
                         
-                        # Determine if this is Sales or Returns
-                        if 'Returns' in str(month_metric):
-                            month_weeks[week_key]['returns_col'] = df.columns[col_idx]
-                        elif 'Sales' in str(month_metric):
-                            month_weeks[week_key]['sales_col'] = df.columns[col_idx]
-                
-                # Build weekly performance table
-                weekly_data = []
-                for week_key, cols in sorted(month_weeks.items()):
-                    if cols['sales_col'] and cols['returns_col']:
-                        sales_val = pd.to_numeric(branch_row[cols['sales_col']].values[0], errors='coerce')
-                        returns_val = pd.to_numeric(branch_row[cols['returns_col']].values[0], errors='coerce')
+                        # Get Sales value
+                        sales_val = pd.to_numeric(branch_row[df.columns[col_idx]].values[0], errors='coerce')
+                        
+                        # Get Returns value (next column)
+                        returns_val = pd.to_numeric(branch_row[df.columns[col_idx + 1]].values[0], errors='coerce')
                         
                         if pd.notna(sales_val) or pd.notna(returns_val):
                             sales_val = sales_val if pd.notna(sales_val) else 0
                             returns_val = returns_val if pd.notna(returns_val) else 0
                             return_pct = (returns_val / sales_val * 100) if sales_val > 0 else 0
                             
+                            week_key = f"{current_month} - W{week}"
                             weekly_data.append({
                                 'Week': week_key,
                                 'Sales': f"{sales_val:.0f}",
@@ -170,22 +161,17 @@ elif page == "📈 Store Analysis":
                     st.subheader("📊 Monthly Summary")
                     monthly_summary = {}
                     
-                    for week_key, cols in month_weeks.items():
-                        month = week_key.split(' - ')[0]
+                    for item in weekly_data:
+                        month = item['Week'].split(' - ')[0]
                         if month not in monthly_summary:
                             monthly_summary[month] = {'sales': 0, 'returns': 0}
                         
-                        if cols['sales_col'] and cols['returns_col']:
-                            sales_val = pd.to_numeric(branch_row[cols['sales_col']].values[0], errors='coerce')
-                            returns_val = pd.to_numeric(branch_row[cols['returns_col']].values[0], errors='coerce')
-                            
-                            if pd.notna(sales_val):
-                                monthly_summary[month]['sales'] += sales_val
-                            if pd.notna(returns_val):
-                                monthly_summary[month]['returns'] += returns_val
+                        monthly_summary[month]['sales'] += float(item['Sales'])
+                        monthly_summary[month]['returns'] += float(item['Returns'])
                     
                     monthly_data = []
-                    for month, values in sorted(monthly_summary.items()):
+                    for month in sorted(monthly_summary.keys()):
+                        values = monthly_summary[month]
                         sales = values['sales']
                         returns = values['returns']
                         return_pct = (returns / sales * 100) if sales > 0 else 0
@@ -234,4 +220,4 @@ elif page == "💡 Optimal Order Recommendations":
     st.info("💡 Recommendation features coming soon.")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v9.2\n\nWeek-by-week & month-by-month analysis.")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v10.0\n\nWeek-by-week & month-by-month analysis.")
