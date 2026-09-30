@@ -71,13 +71,11 @@ elif page == "📈 Store Analysis":
         if 'Customer Parent_Branch' not in df.columns:
             st.error("❌ 'Customer Parent_Branch' column not found")
         else:
-            # Get unique branches - EXCLUDE the "Total" rows
             all_branches = df[df['Customer Parent_Branch'].notna()]['Customer Parent_Branch'].unique()
             branches = [b for b in all_branches if isinstance(b, str) and b.strip() != '' and 'Total' not in b]
             
             selected_branch = st.selectbox("Select Branch", sorted(branches))
             
-            # Get the BRANCH TOTAL row - look for the matching branch name + " Total"
             branch_total_name = selected_branch + " Total"
             branch_total_row = df[df['Customer Parent_Branch'] == branch_total_name]
             
@@ -106,12 +104,12 @@ elif page == "📈 Store Analysis":
                 col2.metric("Total Returns", f"{total_returns:.0f} bales")
                 col3.metric("Return Rate", f"{return_rate:.1f}%")
                 col4.metric("Net Sales", f"{total_sales - total_returns:.0f} bales")
-                col5.metric("Months", len(months))
+                col5.metric("Months", len(month_data))
                 
                 st.subheader("📊 Monthly Breakdown")
                 
-                if month_data:
-                    months_list = list(month_data.keys())
+                months_list = list(month_data.keys())
+                if months_list:
                     sales_list = [month_data[m]['sales'] for m in months_list]
                     returns_list = [month_data[m]['returns'] for m in months_list]
                     
@@ -132,45 +130,45 @@ elif page == "📈 Store Analysis":
                         })
                     
                     st.dataframe(pd.DataFrame(monthly_table), use_container_width=True)
-                
-                # WEEKLY BREAKDOWN
-                st.subheader("📅 Weekly Breakdown (Estimated from Monthly Data)")
-                st.info("Note: Data is monthly. Weekly breakdown is calculated by dividing monthly totals by 4 weeks.")
-                
-                weekly_data = []
-                week_counter = 1
-                
-                for month in months_list:
-                    m_sales = month_data[month]['sales']
-                    m_returns = month_data[month]['returns']
                     
-                    weekly_sales = m_sales / 4
-                    weekly_returns = m_returns / 4
+                    # WEEKLY BREAKDOWN
+                    st.subheader("📅 Weekly Breakdown (Estimated from Monthly Data)")
+                    st.info("Note: Data is monthly. Weekly breakdown is calculated by dividing monthly totals by 4 weeks.")
                     
-                    for week in range(1, 5):
-                        weekly_data.append({
-                            'Week': f"W{week_counter}",
-                            'Month': month,
-                            'Week of Month': f"Week {week}",
-                            'Sales': f"{weekly_sales:.2f}",
-                            'Returns': f"{weekly_returns:.2f}",
-                            'Net': f"{weekly_sales - weekly_returns:.2f}",
-                            'Return %': f"{(weekly_returns/weekly_sales*100 if weekly_sales > 0 else 0):.1f}%"
-                        })
-                        week_counter += 1
-                
-                st.dataframe(pd.DataFrame(weekly_data), use_container_width=True)
-                
-                # Weekly trend chart
-                weekly_df = pd.DataFrame(weekly_data)
-                weekly_df['Sales'] = pd.to_numeric(weekly_df['Sales'])
-                weekly_df['Returns'] = pd.to_numeric(weekly_df['Returns'])
-                
-                fig_weekly = go.Figure()
-                fig_weekly.add_trace(go.Scatter(x=weekly_df['Week'], y=weekly_df['Sales'], name='Sales', mode='lines+markers'))
-                fig_weekly.add_trace(go.Scatter(x=weekly_df['Week'], y=weekly_df['Returns'], name='Returns', mode='lines+markers'))
-                fig_weekly.update_layout(title="Weekly Sales vs Returns Trend", xaxis_title="Week", yaxis_title="Bales", height=400)
-                st.plotly_chart(fig_weekly, use_container_width=True)
+                    weekly_data = []
+                    week_counter = 1
+                    
+                    for month in months_list:
+                        m_sales = month_data[month]['sales']
+                        m_returns = month_data[month]['returns']
+                        
+                        weekly_sales = m_sales / 4
+                        weekly_returns = m_returns / 4
+                        
+                        for week in range(1, 5):
+                            weekly_data.append({
+                                'Week': f"W{week_counter}",
+                                'Month': month,
+                                'Week of Month': f"Week {week}",
+                                'Sales': f"{weekly_sales:.2f}",
+                                'Returns': f"{weekly_returns:.2f}",
+                                'Net': f"{weekly_sales - weekly_returns:.2f}",
+                                'Return %': f"{(weekly_returns/weekly_sales*100 if weekly_sales > 0 else 0):.1f}%"
+                            })
+                            week_counter += 1
+                    
+                    st.dataframe(pd.DataFrame(weekly_data), use_container_width=True)
+                    
+                    # Weekly trend chart
+                    weekly_df = pd.DataFrame(weekly_data)
+                    weekly_df['Sales'] = pd.to_numeric(weekly_df['Sales'])
+                    weekly_df['Returns'] = pd.to_numeric(weekly_df['Returns'])
+                    
+                    fig_weekly = go.Figure()
+                    fig_weekly.add_trace(go.Scatter(x=weekly_df['Week'], y=weekly_df['Sales'], name='Sales', mode='lines+markers'))
+                    fig_weekly.add_trace(go.Scatter(x=weekly_df['Week'], y=weekly_df['Returns'], name='Returns', mode='lines+markers'))
+                    fig_weekly.update_layout(title="Weekly Sales vs Returns Trend", xaxis_title="Week", yaxis_title="Bales", height=400)
+                    st.plotly_chart(fig_weekly, use_container_width=True)
                 
                 st.subheader("📋 All Products in This Branch")
                 all_products = df[(df['Customer Parent_Branch'] == selected_branch) & 
@@ -178,11 +176,6 @@ elif page == "📈 Store Analysis":
                 st.dataframe(all_products, use_container_width=True)
             else:
                 st.error(f"❌ No data found for {selected_branch}")
-                st.write(f"Looking for: '{branch_total_name}'")
-                st.write("Available branches with 'Total':")
-                total_branches = [b for b in all_branches if 'Total' in b]
-                for b in sorted(total_branches)[:10]:
-                    st.write(f"  - {b}")
 
 # ============================================================================
 # PAGE 3: AI RELATIONSHIP ANALYSIS
