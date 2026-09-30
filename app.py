@@ -32,21 +32,61 @@ if page == "📤 Upload Data":
             df = pd.read_csv(uploaded_file, header=3)
             df.columns = df.columns.str.strip()
             
+            # Remove "Unnamed" columns (empty spacing columns)
+            df = df.loc[:, ~df.columns.str.contains('Unnamed')]
+            
+            # Rename first column to "Branch"
+            df = df.rename(columns={df.columns[0]: 'Branch'})
+            
             st.session_state.data = df
             
-            st.success("✅ Data uploaded successfully!")
+            st.success("✅ Data uploaded and cleaned successfully!")
             
-            st.subheader("Data Preview")
-            st.dataframe(df.head(20))
-            
-            st.subheader("Data Summary")
-            col1, col2, col3 = st.columns(3)
+            st.subheader("📊 Data Summary")
+            col1, col2, col3, col4 = st.columns(4)
             col1.metric("Total Rows", len(df))
             col2.metric("Total Columns", len(df.columns))
-            col3.metric("Data Shape", f"{len(df)} x {len(df.columns)}")
+            col3.metric("Unique Branches", df['Branch'].nunique())
+            col4.metric("Data Pairs (Weeks)", (len(df.columns) - 1) // 2)
+            
+            st.subheader("📋 Column Structure")
+            st.write(f"**First Column:** Branch names")
+            st.write(f"**Data Columns:** {len(df.columns) - 1} columns")
+            st.write(f"**Weeks:** {(len(df.columns) - 1) // 2} weeks (each week = Sales + Returns)")
+            
+            st.subheader("🔍 Data Preview (Cleaned)")
+            st.dataframe(df.head(10), use_container_width=True)
+            
+            st.subheader("📈 Data Quality Check")
+            
+            # Check for branches with data
+            branches_with_data = df[df['Branch'].notna()]['Branch'].unique()
+            branches_with_data = [b for b in branches_with_data if isinstance(b, str) and '-' in b and 'CHAPATI' not in b.upper()]
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**Branches Found:** {len(branches_with_data)}")
+                st.write("Sample branches:")
+                for branch in sorted(branches_with_data)[:5]:
+                    st.write(f"  • {branch}")
+            
+            with col2:
+                # Check data density
+                numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+                total_cells = len(df) * len(numeric_cols)
+                filled_cells = df[numeric_cols].notna().sum().sum()
+                data_density = (filled_cells / total_cells * 100) if total_cells > 0 else 0
+                
+                st.write(f"**Data Density:** {data_density:.1f}%")
+                st.write(f"**Filled Cells:** {filled_cells:,} / {total_cells:,}")
+            
+            st.subheader("✅ Ready for Analysis!")
+            st.write("Go to **Store Analysis** to view week-by-week performance for any branch.")
             
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
+            import traceback
+            st.write(traceback.format_exc())
 
 # ============================================================================
 # PAGE 2: STORE ANALYSIS
@@ -59,11 +99,8 @@ elif page == "📈 Store Analysis":
     else:
         df = st.session_state.data.copy()
         
-        # Get first column name
-        first_col = df.columns[0]
-        
-        # Get unique branch names (contain "-" and not product names)
-        all_names = df[first_col].dropna().unique()
+        # Get unique branch names
+        all_names = df['Branch'].dropna().unique()
         branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
         
         if not branches:
@@ -72,7 +109,7 @@ elif page == "📈 Store Analysis":
             selected_branch = st.selectbox("Select Branch", sorted(branches))
             
             # Get the branch row
-            branch_row = df[df[first_col] == selected_branch]
+            branch_row = df[df['Branch'] == selected_branch]
             
             if len(branch_row) > 0:
                 st.subheader(f"Performance Analysis for {selected_branch}")
@@ -96,7 +133,6 @@ elif page == "📈 Store Analysis":
                         returns_val = returns_val if pd.notna(returns_val) else 0
                         
                         # Calculate return percentage
-                        # Original Order = Net Sales + Returns (absolute values)
                         original_order = abs(net_sales_val) + returns_val
                         
                         if original_order > 0:
@@ -106,13 +142,13 @@ elif page == "📈 Store Analysis":
                         
                         # Determine status
                         if net_sales_val < 0:
-                            status = "🔴"  # Negative net sales
+                            status = "🔴"
                         elif return_pct > 20:
-                            status = "🔴"  # High returns
+                            status = "🔴"
                         elif return_pct > 15:
-                            status = "🟡"  # Moderate returns
+                            status = "🟡"
                         else:
-                            status = "🟢"  # Good
+                            status = "🟢"
                         
                         weekly_data.append({
                             'Week': f"W{week_num}",
@@ -192,13 +228,12 @@ elif page == "🤖 AI Relationship Analysis":
         st.info("📊 Analyzing relationships between order quantities, intervals, and returns...")
         
         df = st.session_state.data.copy()
-        first_col = df.columns[0]
-        all_names = df[first_col].dropna().unique()
+        all_names = df['Branch'].dropna().unique()
         branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
         
         if branches:
             selected_branch = st.selectbox("Select Branch for Analysis", sorted(branches))
-            branch_row = df[df[first_col] == selected_branch]
+            branch_row = df[df['Branch'] == selected_branch]
             
             if len(branch_row) > 0:
                 st.subheader(f"Relationship Analysis for {selected_branch}")
@@ -274,13 +309,12 @@ elif page == "💡 Optimal Order Recommendations":
         st.info("💡 Generating recommendations based on order patterns...")
         
         df = st.session_state.data.copy()
-        first_col = df.columns[0]
-        all_names = df[first_col].dropna().unique()
+        all_names = df['Branch'].dropna().unique()
         branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
         
         if branches:
             selected_branch = st.selectbox("Select Branch for Recommendations", sorted(branches))
-            branch_row = df[df[first_col] == selected_branch]
+            branch_row = df[df['Branch'] == selected_branch]
             
             if len(branch_row) > 0:
                 st.subheader(f"Recommendations for {selected_branch}")
@@ -356,4 +390,4 @@ elif page == "💡 Optimal Order Recommendations":
                         st.write("- Maintain current practices")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v12.3\n\nCorrect return rate calculation: Returns / (|Net Sales| + Returns)")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v13.0\n\nCleaned upload with better data preview.")
