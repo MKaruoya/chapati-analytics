@@ -9,15 +9,11 @@ st.title("🍞 Chapati Data Analysis Agent")
 st.sidebar.header("📊 Navigation")
 page = st.sidebar.radio("Select Analysis", [
     "📤 Upload Data",
-    "📈 Store Analysis",
-    "🤖 AI Relationship Analysis",
-    "💡 Optimal Order Recommendations"
+    "📈 Store Analysis"
 ])
 
 if 'data' not in st.session_state:
     st.session_state.data = None
-if 'month_headers' not in st.session_state:
-    st.session_state.month_headers = None
 
 # ============================================================================
 # PAGE 1: UPLOAD DATA
@@ -27,33 +23,21 @@ if page == "📤 Upload Data":
     
     st.info("""
     📋 **Expected Format:**
-    - Row 4: Month headers (March, April, May, etc.)
-    - Row 6: Column headers (Customer Parent Name, Branch, Item Description, Sales/Returns)
-    - Row 7+: Data rows
+    - Excel file with data starting from row 7
+    - Columns: Customer Parent Name, Customer Parent_Branch, Item Description, Sales/Returns
     """)
     
-    uploaded_file = st.file_uploader("Choose a CSV or Excel file", type=['csv', 'xlsx'])
+    uploaded_file = st.file_uploader("Choose an Excel file", type=['xlsx'])
     
     if uploaded_file is not None:
         try:
-            if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file, header=5)
-                month_row = pd.read_csv(uploaded_file, header=None, nrows=4).iloc[3]
-            else:
-                df = pd.read_excel(uploaded_file, header=5)
-                month_row = pd.read_excel(uploaded_file, header=None, nrows=4).iloc[3]
-            
+            df = pd.read_excel(uploaded_file, header=5)
             df.columns = df.columns.str.strip()
             st.session_state.data = df
-            st.session_state.month_headers = month_row
-            
             st.success("✅ Data uploaded successfully!")
             
             st.subheader("Data Preview")
             st.dataframe(df.head(20))
-            
-            st.subheader("Month Headers (Row 4)")
-            st.write(month_row.tolist())
             
             st.subheader("Data Summary")
             col1, col2, col3 = st.columns(3)
@@ -77,58 +61,53 @@ elif page == "📈 Store Analysis":
         st.warning("⚠️ Please upload data first!")
     else:
         df = st.session_state.data.copy()
-        month_headers = st.session_state.month_headers
         
         if 'Customer Parent_Branch' not in df.columns:
             st.error("❌ 'Customer Parent_Branch' column not found")
+            st.write(f"Available columns: {df.columns.tolist()}")
         else:
+            # Get unique branches - EXCLUDE the "Total" rows
             all_branches = df[df['Customer Parent_Branch'].notna()]['Customer Parent_Branch'].unique()
             branches = [b for b in all_branches if isinstance(b, str) and b.strip() != '' and 'Total' not in b]
             
             selected_branch = st.selectbox("Select Branch", sorted(branches))
             
+            # Get the BRANCH TOTAL row - look for the matching branch name + " Total"
             branch_total_name = selected_branch + " Total"
             branch_total_row = df[df['Customer Parent_Branch'] == branch_total_name]
             
             if len(branch_total_row) > 0:
                 st.subheader(f"Analysis for {selected_branch}")
                 
-                # Extract month names from row 4
-                months = []
-                for val in month_headers:
-                    if isinstance(val, str) and val.strip() and val not in ['', 'nan']:
-                        if any(month in val for month in ['March', 'April', 'May', 'June', 'July', 'August', 'September']):
-                            months.append(val.strip())
-                
-                st.write(f"DEBUG: Found months: {months}")
-                st.write(f"DEBUG: Branch total row columns: {branch_total_row.columns.tolist()}")
-                st.write(f"DEBUG: Branch total row data: {branch_total_row.values}")
-                
-                # Get all numeric columns
+                # Get all numeric columns (columns 3 onwards are Sales/Returns)
                 numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-                st.write(f"DEBUG: Numeric columns: {numeric_cols}")
                 
-                # Extract sales and returns columns (alternating pattern)
-                # Columns 3-20 are: Sales, Returns, Sales, Returns, ...
-                sales_cols = [df.columns[i] for i in range(3, len(df.columns), 2)]  # columns 3, 5, 7, 9, 11, 13, 15, 17, 19
-                returns_cols = [df.columns[i] for i in range(4, len(df.columns), 2)]  # columns 4, 6, 8, 10, 12, 14, 16, 18, 20
+                # Columns alternate: Sales, Returns, Sales, Returns...
+                # Starting from column index 3 (after Customer Parent Name, Branch, Item Description)
+                sales_cols = numeric_cols[0::2]  # Every other column starting from 0
+                returns_cols = numeric_cols[1::2]  # Every other column starting from 1
                 
-                st.write(f"DEBUG: Sales columns: {sales_cols}")
-                st.write(f"DEBUG: Returns columns: {returns_cols}")
+                # Extract month names from column names if available
+                months = []
+                for col in sales_cols:
+                    # Try to extract month from column name
+                    for month in ['March', 'April', 'May', 'June', 'July', 'August', 'September']:
+                        if month in str(col):
+                            months.append(month)
+                            break
+                    else:
+                        # If no month found, use generic name
+                        months.append(f"Period {len(months)+1}")
                 
                 month_data = {}
                 
-                for idx, month in enumerate(months):
-                    if idx < len(sales_cols) and idx < len(returns_cols):
-                        sales_col = sales_cols[idx]
-                        returns_col = returns_cols[idx]
-                        
-                        m_sales = pd.to_numeric(branch_total_row[sales_col], errors='coerce').sum()
-                        m_returns = pd.to_numeric(branch_total_row[returns_col], errors='coerce').sum()
-                        
-                        st.write(f"DEBUG: {month} - Sales col: {sales_col} = {m_sales}, Returns col: {returns_col} = {m_returns}")
-                        
-                        month_data[month] = {'sales': m_sales, 'returns': m_returns}
+                for idx, (sales_col, returns_col) in enumerate(zip(sales_cols, returns_cols)):
+                    month = months[idx] if idx < len(months) else f"Period {idx+1}"
+                    
+                    m_sales = pd.to_numeric(branch_total_row[sales_col], errors='coerce').sum()
+                    m_returns = pd.to_numeric(branch_total_row[returns_col], errors='coerce').sum()
+                    
+                    month_data[month] = {'sales': m_sales, 'returns': m_returns}
                 
                 total_sales = sum([v['sales'] for v in month_data.values()])
                 total_returns = sum([v['returns'] for v in month_data.values()])
@@ -139,7 +118,7 @@ elif page == "📈 Store Analysis":
                 col2.metric("Total Returns", f"{total_returns:.0f} bales")
                 col3.metric("Return Rate", f"{return_rate:.1f}%")
                 col4.metric("Net Sales", f"{total_sales - total_returns:.0f} bales")
-                col5.metric("Months", len(months))
+                col5.metric("Periods", len(months))
                 
                 st.subheader("📊 Monthly Breakdown")
                 
@@ -151,13 +130,13 @@ elif page == "📈 Store Analysis":
                     fig = go.Figure()
                     fig.add_trace(go.Bar(x=months_list, y=sales_list, name='Sales', marker_color='green'))
                     fig.add_trace(go.Bar(x=months_list, y=returns_list, name='Returns', marker_color='red'))
-                    fig.update_layout(title="Monthly Sales vs Returns", barmode='group', height=400)
+                    fig.update_layout(title="Sales vs Returns", barmode='group', height=400)
                     st.plotly_chart(fig, use_container_width=True)
                     
                     monthly_table = []
                     for month in months_list:
                         monthly_table.append({
-                            'Month': month,
+                            'Period': month,
                             'Sales': f"{month_data[month]['sales']:.0f}",
                             'Returns': f"{month_data[month]['returns']:.0f}",
                             'Net': f"{month_data[month]['sales'] - month_data[month]['returns']:.0f}",
@@ -165,22 +144,14 @@ elif page == "📈 Store Analysis":
                         })
                     
                     st.dataframe(pd.DataFrame(monthly_table), use_container_width=True)
+                
+                st.subheader("📋 All Products in This Branch")
+                all_products = df[(df['Customer Parent_Branch'] == selected_branch) & 
+                                 (df['Item Description'].notna())]
+                st.dataframe(all_products, use_container_width=True)
             else:
                 st.error(f"❌ No data found for {selected_branch}")
-
-# ============================================================================
-# PAGE 3: AI RELATIONSHIP ANALYSIS
-# ============================================================================
-elif page == "🤖 AI Relationship Analysis":
-    st.header("AI: Relationship Analysis - Quantity, Interval & Returns")
-    st.info("Coming soon - Upload data first")
-
-# ============================================================================
-# PAGE 4: OPTIMAL ORDER RECOMMENDATIONS
-# ============================================================================
-elif page == "💡 Optimal Order Recommendations":
-    st.header("AI: Optimal Order Pattern Recommendations")
-    st.info("Coming soon - Upload data first")
+                st.write(f"Looking for: '{branch_total_name}'")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v8.0\n\nDebugging data parsing.")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v9.0\n\nSimplified data parsing.")
