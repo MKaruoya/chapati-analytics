@@ -80,27 +80,26 @@ elif page == "📈 Store Analysis":
                 # Get all numeric columns (skip first column which has names)
                 numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
                 
-                # Process pairs: every 2 columns = 1 week (Sales, Returns)
+                # Process pairs: every 2 columns = 1 week (Net Sales, Returns)
                 weekly_data = []
                 week_num = 1
                 
                 for i in range(0, len(numeric_cols) - 1, 2):
-                    sales_col = numeric_cols[i]
+                    net_sales_col = numeric_cols[i]
                     returns_col = numeric_cols[i + 1]
                     
-                    sales_val = pd.to_numeric(branch_row[sales_col].values[0], errors='coerce')
+                    net_sales_val = pd.to_numeric(branch_row[net_sales_col].values[0], errors='coerce')
                     returns_val = pd.to_numeric(branch_row[returns_col].values[0], errors='coerce')
                     
-                    if pd.notna(sales_val) or pd.notna(returns_val):
-                        sales_val = sales_val if pd.notna(sales_val) else 0
+                    if pd.notna(net_sales_val) or pd.notna(returns_val):
+                        net_sales_val = net_sales_val if pd.notna(net_sales_val) else 0
                         returns_val = returns_val if pd.notna(returns_val) else 0
-                        return_pct = (returns_val / sales_val * 100) if sales_val > 0 else 0
+                        return_pct = (returns_val / (net_sales_val + returns_val) * 100) if (net_sales_val + returns_val) > 0 else 0
                         
                         weekly_data.append({
                             'Week': f"W{week_num}",
-                            'Sales': f"{sales_val:.0f}",
+                            'Net Sales': f"{net_sales_val:.0f}",
                             'Returns': f"{returns_val:.0f}",
-                            'Net': f"{sales_val - returns_val:.0f}",
                             'Return %': f"{return_pct:.1f}%"
                         })
                     
@@ -112,33 +111,32 @@ elif page == "📈 Store Analysis":
                     st.dataframe(weekly_df, use_container_width=True)
                     
                     # Calculate totals
-                    total_sales = sum([float(row['Sales']) for row in weekly_data])
+                    total_net_sales = sum([float(row['Net Sales']) for row in weekly_data])
                     total_returns = sum([float(row['Returns']) for row in weekly_data])
-                    total_return_pct = (total_returns / total_sales * 100) if total_sales > 0 else 0
+                    total_return_pct = (total_returns / (total_net_sales + total_returns) * 100) if (total_net_sales + total_returns) > 0 else 0
                     
                     st.subheader("📊 Overall Summary")
-                    col1, col2, col3, col4 = st.columns(4)
-                    col1.metric("Total Sales", f"{total_sales:.0f} bales")
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Total Net Sales", f"{total_net_sales:.0f} bales")
                     col2.metric("Total Returns", f"{total_returns:.0f} bales")
-                    col3.metric("Net Sales", f"{total_sales - total_returns:.0f} bales")
-                    col4.metric("Return Rate", f"{total_return_pct:.1f}%")
+                    col3.metric("Return Rate", f"{total_return_pct:.1f}%")
                     
                     # Charts
                     st.subheader("📈 Weekly Trends")
                     
                     weekly_df_plot = weekly_df.copy()
-                    weekly_df_plot['Sales'] = pd.to_numeric(weekly_df_plot['Sales'])
+                    weekly_df_plot['Net Sales'] = pd.to_numeric(weekly_df_plot['Net Sales'])
                     weekly_df_plot['Returns'] = pd.to_numeric(weekly_df_plot['Returns'])
                     
                     fig = go.Figure()
-                    fig.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Sales'], name='Sales', marker_color='green'))
+                    fig.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Net Sales'], name='Net Sales', marker_color='green'))
                     fig.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Returns'], name='Returns', marker_color='red'))
-                    fig.update_layout(title="Weekly Sales vs Returns", barmode='group', height=400)
+                    fig.update_layout(title="Weekly Net Sales vs Returns", barmode='group', height=400)
                     st.plotly_chart(fig, use_container_width=True)
                     
                     # Line chart for trend
                     fig2 = go.Figure()
-                    fig2.add_trace(go.Scatter(x=weekly_df_plot['Week'], y=weekly_df_plot['Sales'], name='Sales', mode='lines+markers', marker=dict(size=8)))
+                    fig2.add_trace(go.Scatter(x=weekly_df_plot['Week'], y=weekly_df_plot['Net Sales'], name='Net Sales', mode='lines+markers', marker=dict(size=8)))
                     fig2.add_trace(go.Scatter(x=weekly_df_plot['Week'], y=weekly_df_plot['Returns'], name='Returns', mode='lines+markers', marker=dict(size=8)))
                     fig2.update_layout(title="Weekly Trend", height=400)
                     st.plotly_chart(fig2, use_container_width=True)
@@ -173,54 +171,54 @@ elif page == "🤖 AI Relationship Analysis":
                 numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
                 
                 # Extract weekly data
-                weekly_sales = []
+                weekly_net_sales = []
                 weekly_returns = []
                 
                 for i in range(0, len(numeric_cols) - 1, 2):
-                    sales_val = pd.to_numeric(branch_row[numeric_cols[i]].values[0], errors='coerce')
+                    net_sales_val = pd.to_numeric(branch_row[numeric_cols[i]].values[0], errors='coerce')
                     returns_val = pd.to_numeric(branch_row[numeric_cols[i + 1]].values[0], errors='coerce')
                     
-                    if pd.notna(sales_val):
-                        weekly_sales.append(sales_val)
+                    if pd.notna(net_sales_val):
+                        weekly_net_sales.append(net_sales_val)
                     if pd.notna(returns_val):
                         weekly_returns.append(returns_val)
                 
-                if weekly_sales and weekly_returns:
+                if weekly_net_sales and weekly_returns:
                     # Calculate statistics
-                    avg_sales = np.mean(weekly_sales)
+                    avg_net_sales = np.mean(weekly_net_sales)
                     avg_returns = np.mean(weekly_returns)
-                    std_sales = np.std(weekly_sales)
+                    std_net_sales = np.std(weekly_net_sales)
                     std_returns = np.std(weekly_returns)
                     
                     st.subheader("📊 Key Metrics")
                     col1, col2, col3, col4 = st.columns(4)
-                    col1.metric("Avg Weekly Sales", f"{avg_sales:.0f} bales")
+                    col1.metric("Avg Weekly Net Sales", f"{avg_net_sales:.0f} bales")
                     col2.metric("Avg Weekly Returns", f"{avg_returns:.0f} bales")
-                    col3.metric("Sales Variability", f"{std_sales:.0f} bales")
+                    col3.metric("Sales Variability", f"{std_net_sales:.0f} bales")
                     col4.metric("Returns Variability", f"{std_returns:.0f} bales")
                     
                     # Correlation
-                    correlation = np.corrcoef(weekly_sales, weekly_returns)[0, 1]
+                    correlation = np.corrcoef(weekly_net_sales, weekly_returns)[0, 1]
                     
                     st.subheader("🔍 Relationship Insights")
                     
                     if correlation > 0.7:
-                        st.warning(f"🔴 **STRONG POSITIVE CORRELATION ({correlation:.2f})**: Higher sales lead to higher returns. This suggests quality or handling issues.")
+                        st.warning(f"🔴 **STRONG POSITIVE CORRELATION ({correlation:.2f})**: Higher net sales lead to higher returns. This suggests quality or handling issues.")
                     elif correlation > 0.3:
-                        st.info(f"🟡 **MODERATE POSITIVE CORRELATION ({correlation:.2f})**: Some relationship between sales and returns.")
+                        st.info(f"🟡 **MODERATE POSITIVE CORRELATION ({correlation:.2f})**: Some relationship between net sales and returns.")
                     elif correlation > -0.3:
-                        st.success(f"🟢 **WEAK/NO CORRELATION ({correlation:.2f})**: Sales and returns are independent.")
+                        st.success(f"🟢 **WEAK/NO CORRELATION ({correlation:.2f})**: Net sales and returns are independent.")
                     else:
-                        st.success(f"🟢 **NEGATIVE CORRELATION ({correlation:.2f})**: Higher sales actually lead to lower returns (good sign!).")
+                        st.success(f"🟢 **NEGATIVE CORRELATION ({correlation:.2f})**: Higher net sales actually lead to lower returns (good sign!).")
                     
                     # Trend analysis
                     st.subheader("📈 Trend Analysis")
                     
-                    if len(weekly_sales) > 1:
-                        sales_trend = "Increasing" if weekly_sales[-1] > weekly_sales[0] else "Decreasing" if weekly_sales[-1] < weekly_sales[0] else "Stable"
+                    if len(weekly_net_sales) > 1:
+                        sales_trend = "Increasing" if weekly_net_sales[-1] > weekly_net_sales[0] else "Decreasing" if weekly_net_sales[-1] < weekly_net_sales[0] else "Stable"
                         returns_trend = "Increasing" if weekly_returns[-1] > weekly_returns[0] else "Decreasing" if weekly_returns[-1] < weekly_returns[0] else "Stable"
                         
-                        st.write(f"**Sales Trend:** {sales_trend}")
+                        st.write(f"**Net Sales Trend:** {sales_trend}")
                         st.write(f"**Returns Trend:** {returns_trend}")
 
 # ============================================================================
@@ -249,26 +247,26 @@ elif page == "💡 Optimal Order Recommendations":
                 numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
                 
                 # Extract weekly data
-                weekly_sales = []
+                weekly_net_sales = []
                 weekly_returns = []
                 
                 for i in range(0, len(numeric_cols) - 1, 2):
-                    sales_val = pd.to_numeric(branch_row[numeric_cols[i]].values[0], errors='coerce')
+                    net_sales_val = pd.to_numeric(branch_row[numeric_cols[i]].values[0], errors='coerce')
                     returns_val = pd.to_numeric(branch_row[numeric_cols[i + 1]].values[0], errors='coerce')
                     
-                    if pd.notna(sales_val):
-                        weekly_sales.append(sales_val)
+                    if pd.notna(net_sales_val):
+                        weekly_net_sales.append(net_sales_val)
                     if pd.notna(returns_val):
                         weekly_returns.append(returns_val)
                 
-                if weekly_sales and weekly_returns:
-                    avg_sales = np.mean(weekly_sales)
+                if weekly_net_sales and weekly_returns:
+                    avg_net_sales = np.mean(weekly_net_sales)
                     avg_returns = np.mean(weekly_returns)
-                    return_rate = (avg_returns / avg_sales * 100) if avg_sales > 0 else 0
+                    return_rate = (avg_returns / (avg_net_sales + avg_returns) * 100) if (avg_net_sales + avg_returns) > 0 else 0
                     
                     st.subheader("📋 Current Pattern")
                     col1, col2, col3 = st.columns(3)
-                    col1.metric("Avg Weekly Order", f"{avg_sales:.0f} bales")
+                    col1.metric("Avg Weekly Net Sales", f"{avg_net_sales:.0f} bales")
                     col2.metric("Avg Weekly Returns", f"{avg_returns:.0f} bales")
                     col3.metric("Return Rate", f"{return_rate:.1f}%")
                     
@@ -294,4 +292,4 @@ elif page == "💡 Optimal Order Recommendations":
                         st.write("- Maintain current practices")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v12.0\n\nSimple week-by-week analysis.")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v12.1\n\nWorking with Net Sales (returns already deducted).")
