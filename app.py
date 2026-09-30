@@ -71,14 +71,15 @@ elif page == "📈 Store Analysis":
         if 'Customer Parent_Branch' not in df.columns:
             st.error("❌ 'Customer Parent_Branch' column not found")
         else:
-            branches = df[df['Customer Parent_Branch'].notna()]['Customer Parent_Branch'].unique()
-            branches = [b for b in branches if isinstance(b, str) and b.strip() != '']
+            # Get unique branches - EXCLUDE the "Total" rows
+            all_branches = df[df['Customer Parent_Branch'].notna()]['Customer Parent_Branch'].unique()
+            branches = [b for b in all_branches if isinstance(b, str) and b.strip() != '' and 'Total' not in b]
             
             selected_branch = st.selectbox("Select Branch", sorted(branches))
             
-            branch_total_row = df[(df['Customer Parent_Branch'] == selected_branch) & 
-                                  (df['Item Description'].notna()) &
-                                  (df['Item Description'].astype(str).str.contains('Total', case=False, na=False))]
+            # Get the BRANCH TOTAL row - look for the matching branch name + " Total"
+            branch_total_name = selected_branch + " Total"
+            branch_total_row = df[df['Customer Parent_Branch'] == branch_total_name]
             
             if len(branch_total_row) > 0:
                 st.subheader(f"Analysis for {selected_branch}")
@@ -143,7 +144,6 @@ elif page == "📈 Store Analysis":
                     m_sales = month_data[month]['sales']
                     m_returns = month_data[month]['returns']
                     
-                    # Divide by 4 weeks
                     weekly_sales = m_sales / 4
                     weekly_returns = m_returns / 4
                     
@@ -174,11 +174,15 @@ elif page == "📈 Store Analysis":
                 
                 st.subheader("📋 All Products in This Branch")
                 all_products = df[(df['Customer Parent_Branch'] == selected_branch) & 
-                                 (~df['Item Description'].astype(str).str.contains('Total', case=False, na=False)) &
                                  (df['Item Description'].notna())]
                 st.dataframe(all_products, use_container_width=True)
             else:
-                st.warning(f"⚠️ No branch total row found for {selected_branch}")
+                st.error(f"❌ No data found for {selected_branch}")
+                st.write(f"Looking for: '{branch_total_name}'")
+                st.write("Available branches with 'Total':")
+                total_branches = [b for b in all_branches if 'Total' in b]
+                for b in sorted(total_branches)[:10]:
+                    st.write(f"  - {b}")
 
 # ============================================================================
 # PAGE 3: AI RELATIONSHIP ANALYSIS
@@ -194,14 +198,13 @@ elif page == "🤖 AI Relationship Analysis":
         if 'Customer Parent_Branch' not in df.columns:
             st.error("❌ 'Customer Parent_Branch' column not found")
         else:
-            branches = df[df['Customer Parent_Branch'].notna()]['Customer Parent_Branch'].unique()
-            branches = [b for b in branches if isinstance(b, str) and b.strip() != '']
+            all_branches = df[df['Customer Parent_Branch'].notna()]['Customer Parent_Branch'].unique()
+            branches = [b for b in all_branches if isinstance(b, str) and b.strip() != '' and 'Total' not in b]
             
             selected_branch = st.selectbox("Select Branch for Relationship Analysis", sorted(branches))
             
-            branch_total_row = df[(df['Customer Parent_Branch'] == selected_branch) & 
-                                  (df['Item Description'].notna()) &
-                                  (df['Item Description'].astype(str).str.contains('Total', case=False, na=False))]
+            branch_total_name = selected_branch + " Total"
+            branch_total_row = df[df['Customer Parent_Branch'] == branch_total_name]
             
             if len(branch_total_row) > 0:
                 st.subheader(f"Relationship Analysis for {selected_branch}")
@@ -227,8 +230,6 @@ elif page == "🤖 AI Relationship Analysis":
                 return_rate = (total_returns / total_sales * 100) if total_sales > 0 else 0
                 avg_monthly_sales = total_sales / len(months)
                 avg_monthly_returns = total_returns / len(months)
-                
-                # Calculate weekly average
                 avg_weekly_sales = avg_monthly_sales / 4
                 avg_weekly_returns = avg_monthly_returns / 4
                 
@@ -282,27 +283,7 @@ elif page == "🤖 AI Relationship Analysis":
                 
                 analysis_text += f"""
                 
-                ### **2. ORDER INTERVAL vs RETURNS RELATIONSHIP**
-                
-                - **Current Order Interval**: Weekly (7 days)
-                - **Orders per Month**: 4
-                - **Frequency**: Every 7 days
-                
-                **Interpretation:**
-                """
-                
-                analysis_text += """
-                🟢 **FREQUENT ORDERS**: Orders every week.
-                - Good for product freshness
-                - Reduces spoilage and returns
-                - Maintains stock availability
-                
-                **Recommendation**: Maintain current frequency
-                """
-                
-                analysis_text += f"""
-                
-                ### **3. SALES TREND vs RETURNS TREND**
+                ### **2. SALES TREND vs RETURNS TREND**
                 
                 - **Sales Trend**: {sales_trend}
                 - **Returns Trend**: {returns_trend}
@@ -360,14 +341,13 @@ elif page == "💡 Optimal Order Recommendations":
         if 'Customer Parent_Branch' not in df.columns:
             st.error("❌ 'Customer Parent_Branch' column not found")
         else:
-            branches = df[df['Customer Parent_Branch'].notna()]['Customer Parent_Branch'].unique()
-            branches = [b for b in branches if isinstance(b, str) and b.strip() != '']
+            all_branches = df[df['Customer Parent_Branch'].notna()]['Customer Parent_Branch'].unique()
+            branches = [b for b in all_branches if isinstance(b, str) and b.strip() != '' and 'Total' not in b]
             
             selected_branch = st.selectbox("Select Branch for Recommendations", sorted(branches))
             
-            branch_total_row = df[(df['Customer Parent_Branch'] == selected_branch) & 
-                                  (df['Item Description'].notna()) &
-                                  (df['Item Description'].astype(str).str.contains('Total', case=False, na=False))]
+            branch_total_name = selected_branch + " Total"
+            branch_total_row = df[df['Customer Parent_Branch'] == branch_total_name]
             
             if len(branch_total_row) > 0:
                 st.subheader(f"Optimal Order Pattern for {selected_branch}")
@@ -495,4 +475,4 @@ elif page == "💡 Optimal Order Recommendations":
                 st.dataframe(pd.DataFrame(comparison_data), use_container_width=True)
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v6.0\n\nWeekly breakdown analysis for better insights.")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v7.0\n\nFixed branch total row detection.")
