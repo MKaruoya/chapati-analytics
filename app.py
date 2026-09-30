@@ -2,7 +2,6 @@
 import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
-from datetime import datetime
 
 st.set_page_config(page_title="Chapati Analytics", layout="wide")
 st.title("🍞 Chapati Data Analysis Agent")
@@ -46,7 +45,7 @@ if page == "📤 Upload Data":
             st.success("✅ Data uploaded successfully!")
             
             st.subheader("Data Preview")
-            st.dataframe(df.head(15))
+            st.dataframe(df.head(20))
             
             st.subheader("Data Summary")
             col1, col2, col3 = st.columns(3)
@@ -72,13 +71,18 @@ elif page == "📈 Store Analysis":
         if 'Customer Parent_Branch' not in df.columns:
             st.error("❌ 'Customer Parent_Branch' column not found")
         else:
-            branches = df[df['Customer Parent_Branch'].notna() & (df['Customer Parent_Branch'].str.contains('Total', case=False, na=False) == False)]['Customer Parent_Branch'].unique()
+            # Get unique branches (exclude NaN and empty)
+            branches = df[df['Customer Parent_Branch'].notna()]['Customer Parent_Branch'].unique()
+            branches = [b for b in branches if isinstance(b, str) and b.strip() != '']
+            
             selected_branch = st.selectbox("Select Branch", sorted(branches))
             
-            branch_data = df[(df['Customer Parent_Branch'] == selected_branch) & 
-                            (~df['Customer Parent_Branch'].str.contains('Total', case=False, na=False))]
+            # Get the BRANCH TOTAL row (contains "Total" in Item Description)
+            branch_total_row = df[(df['Customer Parent_Branch'] == selected_branch) & 
+                                  (df['Item Description'].notna()) &
+                                  (df['Item Description'].astype(str).str.contains('Total', case=False, na=False))]
             
-            if len(branch_data) > 0:
+            if len(branch_total_row) > 0:
                 st.subheader(f"Analysis for {selected_branch}")
                 
                 numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
@@ -90,8 +94,8 @@ elif page == "📈 Store Analysis":
                     returns_col = [col for col in numeric_cols if month in col and ('Returns' in col or 'returns' in col)]
                     
                     if sales_col and returns_col:
-                        m_sales = pd.to_numeric(branch_data[sales_col[0]], errors='coerce').sum()
-                        m_returns = pd.to_numeric(branch_data[returns_col[0]], errors='coerce').sum()
+                        m_sales = pd.to_numeric(branch_total_row[sales_col[0]], errors='coerce').sum()
+                        m_returns = pd.to_numeric(branch_total_row[returns_col[0]], errors='coerce').sum()
                         month_data[month] = {'sales': m_sales, 'returns': m_returns}
                 
                 total_sales = sum([v['sales'] for v in month_data.values()])
@@ -102,8 +106,8 @@ elif page == "📈 Store Analysis":
                 col1.metric("Total Sales", f"{total_sales:.0f} bales")
                 col2.metric("Total Returns", f"{total_returns:.0f} bales")
                 col3.metric("Return Rate", f"{return_rate:.1f}%")
-                col4.metric("Products", len(branch_data))
-                col5.metric("Net Sales", f"{total_sales - total_returns:.0f} bales")
+                col4.metric("Net Sales", f"{total_sales - total_returns:.0f} bales")
+                col5.metric("Months", len(months))
                 
                 st.subheader("📊 Monthly Breakdown")
                 
@@ -130,8 +134,14 @@ elif page == "📈 Store Analysis":
                     
                     st.dataframe(pd.DataFrame(monthly_table), use_container_width=True)
                 
-                st.subheader("📋 Product Details")
-                st.dataframe(branch_data, use_container_width=True)
+                st.subheader("📋 All Products in This Branch")
+                # Show all individual products
+                all_products = df[(df['Customer Parent_Branch'] == selected_branch) & 
+                                 (~df['Item Description'].astype(str).str.contains('Total', case=False, na=False)) &
+                                 (df['Item Description'].notna())]
+                st.dataframe(all_products, use_container_width=True)
+            else:
+                st.warning(f"⚠️ No branch total row found for {selected_branch}")
 
 # ============================================================================
 # PAGE 3: AI RELATIONSHIP ANALYSIS
@@ -147,19 +157,21 @@ elif page == "🤖 AI Relationship Analysis":
         if 'Customer Parent_Branch' not in df.columns:
             st.error("❌ 'Customer Parent_Branch' column not found")
         else:
-            branches = df[df['Customer Parent_Branch'].notna() & (df['Customer Parent_Branch'].str.contains('Total', case=False, na=False) == False)]['Customer Parent_Branch'].unique()
+            branches = df[df['Customer Parent_Branch'].notna()]['Customer Parent_Branch'].unique()
+            branches = [b for b in branches if isinstance(b, str) and b.strip() != '']
+            
             selected_branch = st.selectbox("Select Branch for Relationship Analysis", sorted(branches))
             
-            branch_data = df[(df['Customer Parent_Branch'] == selected_branch) & 
-                            (~df['Customer Parent_Branch'].str.contains('Total', case=False, na=False))]
+            branch_total_row = df[(df['Customer Parent_Branch'] == selected_branch) & 
+                                  (df['Item Description'].notna()) &
+                                  (df['Item Description'].astype(str).str.contains('Total', case=False, na=False))]
             
-            if len(branch_data) > 0:
+            if len(branch_total_row) > 0:
                 st.subheader(f"Relationship Analysis for {selected_branch}")
                 
                 numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
                 months = ['March', 'April', 'May', 'June', 'July', 'August', 'September']
                 
-                # Extract monthly data
                 monthly_sales = []
                 monthly_returns = []
                 
@@ -168,36 +180,30 @@ elif page == "🤖 AI Relationship Analysis":
                     returns_col = [col for col in numeric_cols if month in col and ('Returns' in col or 'returns' in col)]
                     
                     if sales_col and returns_col:
-                        m_sales = pd.to_numeric(branch_data[sales_col[0]], errors='coerce').sum()
-                        m_returns = pd.to_numeric(branch_data[returns_col[0]], errors='coerce').sum()
+                        m_sales = pd.to_numeric(branch_total_row[sales_col[0]], errors='coerce').sum()
+                        m_returns = pd.to_numeric(branch_total_row[returns_col[0]], errors='coerce').sum()
                         monthly_sales.append(m_sales)
                         monthly_returns.append(m_returns)
                 
-                # Calculate metrics
                 total_sales = sum(monthly_sales)
                 total_returns = sum(monthly_returns)
                 return_rate = (total_returns / total_sales * 100) if total_sales > 0 else 0
                 avg_monthly_sales = total_sales / len(months)
                 avg_monthly_returns = total_returns / len(months)
                 
-                # Calculate order interval (assuming orders every month)
-                order_interval = 30 / len(months)  # Days between orders
-                
-                # Analyze trends
-                sales_trend = "Increasing" if monthly_sales[-1] > monthly_sales[0] else "Decreasing" if monthly_sales[-1] < monthly_sales[0] else "Stable"
-                returns_trend = "Increasing" if monthly_returns[-1] > monthly_returns[0] else "Decreasing" if monthly_returns[-1] < monthly_returns[0] else "Stable"
-                
                 st.subheader("📊 Key Metrics")
                 col1, col2, col3, col4, col5 = st.columns(5)
                 col1.metric("Avg Monthly Sales", f"{avg_monthly_sales:.0f} bales")
                 col2.metric("Avg Monthly Returns", f"{avg_monthly_returns:.0f} bales")
                 col3.metric("Return Rate", f"{return_rate:.1f}%")
-                col4.metric("Order Interval", f"{order_interval:.0f} days")
-                col5.metric("Products", len(branch_data))
+                col4.metric("Total Sales", f"{total_sales:.0f} bales")
+                col5.metric("Total Returns", f"{total_returns:.0f} bales")
                 
                 st.subheader("🔍 Relationship Analysis")
                 
-                # Create analysis report
+                sales_trend = "Increasing" if monthly_sales[-1] > monthly_sales[0] else "Decreasing" if monthly_sales[-1] < monthly_sales[0] else "Stable"
+                returns_trend = "Increasing" if monthly_returns[-1] > monthly_returns[0] else "Decreasing" if monthly_returns[-1] < monthly_returns[0] else "Stable"
+                
                 analysis_text = f"""
                 ### **1. ORDER QUANTITY vs RETURNS RELATIONSHIP**
                 
@@ -235,45 +241,7 @@ elif page == "🤖 AI Relationship Analysis":
                 
                 analysis_text += f"""
                 
-                ### **2. ORDER INTERVAL vs RETURNS RELATIONSHIP**
-                
-                - **Current Order Interval**: {order_interval:.0f} days
-                - **Number of Orders (7 months)**: {len(months)}
-                - **Frequency**: Every {order_interval:.0f} days
-                
-                **Interpretation:**
-                """
-                
-                if order_interval > 30:
-                    analysis_text += """
-                    🔴 **INFREQUENT ORDERS**: Long intervals between orders may cause:
-                    - Product spoilage/expiration
-                    - Stockouts between orders
-                    - Higher returns due to age
-                    
-                    **Recommendation**: Increase order frequency to every 7-14 days
-                    """
-                elif order_interval > 14:
-                    analysis_text += """
-                    🟡 **MODERATE INTERVAL**: Orders every 2-4 weeks.
-                    - Risk of product aging and returns
-                    - Some potential for stockouts
-                    
-                    **Recommendation**: Consider increasing to every 7-10 days
-                    """
-                else:
-                    analysis_text += """
-                    🟢 **FREQUENT ORDERS**: Orders every 1-2 weeks.
-                    - Good for product freshness
-                    - Reduces spoilage and returns
-                    - Maintains stock availability
-                    
-                    **Recommendation**: Maintain current frequency
-                    """
-                
-                analysis_text += f"""
-                
-                ### **3. SALES TREND vs RETURNS TREND**
+                ### **2. SALES TREND vs RETURNS TREND**
                 
                 - **Sales Trend**: {sales_trend}
                 - **Returns Trend**: {returns_trend}
@@ -309,7 +277,6 @@ elif page == "🤖 AI Relationship Analysis":
                 
                 st.markdown(analysis_text)
                 
-                # Visualization
                 st.subheader("📈 Monthly Trends")
                 
                 fig = go.Figure()
@@ -332,13 +299,16 @@ elif page == "💡 Optimal Order Recommendations":
         if 'Customer Parent_Branch' not in df.columns:
             st.error("❌ 'Customer Parent_Branch' column not found")
         else:
-            branches = df[df['Customer Parent_Branch'].notna() & (df['Customer Parent_Branch'].str.contains('Total', case=False, na=False) == False)]['Customer Parent_Branch'].unique()
+            branches = df[df['Customer Parent_Branch'].notna()]['Customer Parent_Branch'].unique()
+            branches = [b for b in branches if isinstance(b, str) and b.strip() != '']
+            
             selected_branch = st.selectbox("Select Branch for Recommendations", sorted(branches))
             
-            branch_data = df[(df['Customer Parent_Branch'] == selected_branch) & 
-                            (~df['Customer Parent_Branch'].str.contains('Total', case=False, na=False))]
+            branch_total_row = df[(df['Customer Parent_Branch'] == selected_branch) & 
+                                  (df['Item Description'].notna()) &
+                                  (df['Item Description'].astype(str).str.contains('Total', case=False, na=False))]
             
-            if len(branch_data) > 0:
+            if len(branch_total_row) > 0:
                 st.subheader(f"Optimal Order Pattern for {selected_branch}")
                 
                 numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
@@ -352,8 +322,8 @@ elif page == "💡 Optimal Order Recommendations":
                     returns_col = [col for col in numeric_cols if month in col and ('Returns' in col or 'returns' in col)]
                     
                     if sales_col and returns_col:
-                        m_sales = pd.to_numeric(branch_data[sales_col[0]], errors='coerce').sum()
-                        m_returns = pd.to_numeric(branch_data[returns_col[0]], errors='coerce').sum()
+                        m_sales = pd.to_numeric(branch_total_row[sales_col[0]], errors='coerce').sum()
+                        m_returns = pd.to_numeric(branch_total_row[returns_col[0]], errors='coerce').sum()
                         monthly_sales.append(m_sales)
                         monthly_returns.append(m_returns)
                 
@@ -372,26 +342,26 @@ elif page == "💡 Optimal Order Recommendations":
                 
                 # Calculate recommendations
                 if return_rate > 20:
-                    recommended_qty = avg_monthly_sales * 0.75  # Reduce by 25%
-                    recommended_interval = 14  # Every 2 weeks
+                    recommended_qty = avg_monthly_sales * 0.75
+                    recommended_interval = 14
                     expected_return_reduction = 25
                     confidence = "High"
                     priority = "🔴 CRITICAL"
                 elif return_rate > 15:
-                    recommended_qty = avg_monthly_sales * 0.85  # Reduce by 15%
-                    recommended_interval = 14  # Every 2 weeks
+                    recommended_qty = avg_monthly_sales * 0.85
+                    recommended_interval = 14
                     expected_return_reduction = 20
                     confidence = "High"
                     priority = "🟡 HIGH"
                 elif return_rate > 10:
-                    recommended_qty = avg_monthly_sales * 0.95  # Reduce by 5%
-                    recommended_interval = 14  # Every 2 weeks
+                    recommended_qty = avg_monthly_sales * 0.95
+                    recommended_interval = 14
                     expected_return_reduction = 10
                     confidence = "Medium"
                     priority = "🟡 MODERATE"
                 else:
-                    recommended_qty = avg_monthly_sales * 1.10  # Increase by 10%
-                    recommended_interval = 14  # Every 2 weeks
+                    recommended_qty = avg_monthly_sales * 1.10
+                    recommended_interval = 14
                     expected_return_reduction = 0
                     confidence = "High"
                     priority = "🟢 GOOD"
@@ -417,87 +387,16 @@ elif page == "💡 Optimal Order Recommendations":
                 
                 1. **Order Quantity**: {recommended_qty:.0f} bales per order
                    - Change: {((recommended_qty/avg_monthly_sales - 1) * 100):+.1f}%
-                   - Rationale: Optimize for current return rate
                 
                 2. **Order Frequency**: Every 14 days (bi-weekly)
-                   - Current: Monthly
-                   - Benefit: Fresher products, reduced spoilage
                 
                 3. **Expected Impact:**
                    - Return rate reduction: {expected_return_reduction:.1f}%
                    - New expected return rate: {max(0, return_rate - expected_return_reduction):.1f}%
-                   - Improved stock availability
-                
-                **Implementation Steps:**
                 """
-                
-                if return_rate > 20:
-                    recommendations += """
-                1. **Immediate (Week 1)**: 
-                   - Investigate root cause of high returns
-                   - Check product quality and handling procedures
-                   - Review storage conditions
-                
-                2. **Short-term (Week 2-4)**:
-                   - Reduce order quantity to {:.0f} bales
-                   - Switch to bi-weekly ordering
-                   - Monitor returns closely
-                
-                3. **Medium-term (Month 2-3)**:
-                   - Analyze return trends
-                   - Adjust quantities based on actual performance
-                   - Consider supplier quality review
-                    """.format(recommended_qty)
-                elif return_rate > 15:
-                    recommendations += """
-                1. **Immediate (Week 1)**:
-                   - Reduce order quantity to {:.0f} bales
-                   - Plan transition to bi-weekly orders
-                
-                2. **Short-term (Week 2-4)**:
-                   - Implement bi-weekly ordering schedule
-                   - Monitor return trends
-                   - Track product freshness
-                
-                3. **Medium-term (Month 2-3)**:
-                   - Evaluate return reduction
-                   - Adjust quantities if needed
-                   - Consider increasing orders if returns drop
-                    """.format(recommended_qty)
-                elif return_rate > 10:
-                    recommendations += """
-                1. **Immediate (Week 1)**:
-                   - Maintain current quantities
-                   - Plan transition to bi-weekly orders
-                
-                2. **Short-term (Week 2-4)**:
-                   - Implement bi-weekly ordering
-                   - Monitor for improvements
-                
-                3. **Medium-term (Month 2-3)**:
-                   - If returns drop below 10%, consider increasing orders
-                   - Optimize based on actual performance
-                    """
-                else:
-                    recommendations += """
-                1. **Immediate (Week 1)**:
-                   - Increase order quantity to {:.0f} bales
-                   - Maintain current monthly frequency or switch to bi-weekly
-                
-                2. **Short-term (Week 2-4)**:
-                   - Monitor sales and returns
-                   - Ensure stock availability
-                   - Track customer satisfaction
-                
-                3. **Medium-term (Month 2-3)**:
-                   - Continue monitoring
-                   - Further increase if demand supports it
-                   - Maintain low return rate
-                    """.format(recommended_qty)
                 
                 st.markdown(recommendations)
                 
-                # Summary table
                 st.subheader("📊 Comparison Summary")
                 
                 comparison_data = {
@@ -527,4 +426,4 @@ elif page == "💡 Optimal Order Recommendations":
                 st.dataframe(pd.DataFrame(comparison_data), use_container_width=True)
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v4.0\n\nAI-powered analysis of order quantities, intervals, and returns relationships.")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v5.0\n\nAI-powered analysis using BRANCH TOTALS for accurate insights.")
