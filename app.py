@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
 import io
+import re
 
 st.set_page_config(page_title="Chapati Analytics", layout="wide")
 st.title("🍞 Chapati Data Analysis Agent")
@@ -28,10 +29,7 @@ if page == "📤 Upload Data":
     
     st.info("""
     📋 **Expected Format:**
-    - CSV file with multi-row headers (rows 1-3)
-    - Row 1: Column Labels
-    - Row 2: Month headers
-    - Row 3: Week numbers
+    - CSV file with multi-row headers
     - Data starts from row 4
     """)
     
@@ -54,13 +52,11 @@ if page == "📤 Upload Data":
             
             st.success("✅ Data uploaded successfully!")
             
-            st.subheader("Header Structure (Corrected)")
-            st.write("**Row 1 (Labels):**")
-            st.write(header_rows.iloc[0].tolist()[:20])
-            st.write("**Row 2 (Months):**")
-            st.write(header_rows.iloc[1].tolist()[:20])
+            st.subheader("Header Structure")
+            st.write("**Row 2 (Months & Metrics):**")
+            st.write(header_rows.iloc[1].tolist()[:25])
             st.write("**Row 3 (Weeks):**")
-            st.write(header_rows.iloc[2].tolist()[:20])
+            st.write(header_rows.iloc[2].tolist()[:25])
             
             st.subheader("Data Preview")
             st.dataframe(df.head(20))
@@ -108,34 +104,41 @@ elif page == "📈 Store Analysis":
             if len(branch_row) > 0:
                 st.subheader(f"Performance Analysis for {selected_branch}")
                 
-                # Extract header information - CORRECTED ORDER
-                labels_row = headers.iloc[0].tolist()
-                months_row = headers.iloc[1].tolist()
+                # Extract header information
+                months_metrics_row = headers.iloc[1].tolist()
                 weeks_row = headers.iloc[2].tolist()
                 
-                # Parse the structure: identify month boundaries and weeks
-                current_month = None
+                # Parse the structure
                 month_weeks = {}
+                current_month = None
                 
                 for col_idx in range(1, len(df.columns)):  # Skip first column (names)
-                    month = months_row[col_idx] if col_idx < len(months_row) else None
+                    month_metric = months_metrics_row[col_idx] if col_idx < len(months_metrics_row) else None
                     week = weeks_row[col_idx] if col_idx < len(weeks_row) else None
-                    label = labels_row[col_idx] if col_idx < len(labels_row) else None
                     
-                    # Update current month
-                    if pd.notna(month) and month != '' and month != 'NaN':
-                        current_month = month
+                    # Extract month from the month_metric string
+                    if pd.notna(month_metric) and month_metric != '' and month_metric != 'NaN':
+                        # Check if it contains "Sum of"
+                        if 'Sum of' in str(month_metric):
+                            # Extract month and metric type
+                            match = re.search(r'(\d{2}\s\w+)\s(Sum of.*)', str(month_metric))
+                            if match:
+                                current_month = match.group(1)
+                                metric_type = match.group(2)
+                        else:
+                            # Just a month name
+                            current_month = month_metric
                     
-                    # Create week key
+                    # Create week key if we have month and week
                     if current_month and pd.notna(week) and week != '' and week != 'NaN':
                         week_key = f"{current_month} - W{week}"
                         if week_key not in month_weeks:
                             month_weeks[week_key] = {'sales_col': None, 'returns_col': None}
                         
                         # Determine if this is Sales or Returns
-                        if 'Returns' in str(label):
+                        if 'Returns' in str(month_metric):
                             month_weeks[week_key]['returns_col'] = df.columns[col_idx]
-                        elif 'Sales' in str(label):
+                        elif 'Sales' in str(month_metric):
                             month_weeks[week_key]['sales_col'] = df.columns[col_idx]
                 
                 # Build weekly performance table
@@ -231,4 +234,4 @@ elif page == "💡 Optimal Order Recommendations":
     st.info("💡 Recommendation features coming soon.")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v9.1\n\nWeek-by-week & month-by-month analysis.")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v9.2\n\nWeek-by-week & month-by-month analysis.")
