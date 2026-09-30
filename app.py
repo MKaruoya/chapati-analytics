@@ -29,9 +29,9 @@ if page == "📤 Upload Data":
     st.info("""
     📋 **Expected Format:**
     - CSV file with multi-row headers (rows 1-3)
-    - Row 1: Month headers
-    - Row 2: Week numbers
-    - Row 3: Metric types (Sales/Returns)
+    - Row 1: Column Labels
+    - Row 2: Month headers
+    - Row 3: Week numbers
     - Data starts from row 4
     """)
     
@@ -54,12 +54,12 @@ if page == "📤 Upload Data":
             
             st.success("✅ Data uploaded successfully!")
             
-            st.subheader("Header Structure")
-            st.write("**Row 1 (Months):**")
+            st.subheader("Header Structure (Corrected)")
+            st.write("**Row 1 (Labels):**")
             st.write(header_rows.iloc[0].tolist()[:20])
-            st.write("**Row 2 (Weeks):**")
+            st.write("**Row 2 (Months):**")
             st.write(header_rows.iloc[1].tolist()[:20])
-            st.write("**Row 3 (Metrics):**")
+            st.write("**Row 3 (Weeks):**")
             st.write(header_rows.iloc[2].tolist()[:20])
             
             st.subheader("Data Preview")
@@ -102,16 +102,16 @@ elif page == "📈 Store Analysis":
         else:
             selected_branch = st.selectbox("Select Branch", sorted(branches))
             
-            # Get the branch row (exact match, not containing)
+            # Get the branch row (exact match)
             branch_row = df[df[first_col] == selected_branch]
             
             if len(branch_row) > 0:
                 st.subheader(f"Performance Analysis for {selected_branch}")
                 
-                # Extract header information
-                months_row = headers.iloc[0].tolist()
-                weeks_row = headers.iloc[1].tolist()
-                metrics_row = headers.iloc[2].tolist()
+                # Extract header information - CORRECTED ORDER
+                labels_row = headers.iloc[0].tolist()
+                months_row = headers.iloc[1].tolist()
+                weeks_row = headers.iloc[2].tolist()
                 
                 # Parse the structure: identify month boundaries and weeks
                 current_month = None
@@ -120,24 +120,27 @@ elif page == "📈 Store Analysis":
                 for col_idx in range(1, len(df.columns)):  # Skip first column (names)
                     month = months_row[col_idx] if col_idx < len(months_row) else None
                     week = weeks_row[col_idx] if col_idx < len(weeks_row) else None
-                    metric = metrics_row[col_idx] if col_idx < len(metrics_row) else None
+                    label = labels_row[col_idx] if col_idx < len(labels_row) else None
                     
-                    if pd.notna(month) and month != '':
+                    # Update current month
+                    if pd.notna(month) and month != '' and month != 'NaN':
                         current_month = month
                     
-                    if current_month and pd.notna(week) and week != '':
+                    # Create week key
+                    if current_month and pd.notna(week) and week != '' and week != 'NaN':
                         week_key = f"{current_month} - W{week}"
                         if week_key not in month_weeks:
                             month_weeks[week_key] = {'sales_col': None, 'returns_col': None}
                         
-                        if 'Sales' in str(metric):
-                            month_weeks[week_key]['sales_col'] = df.columns[col_idx]
-                        elif 'Returns' in str(metric):
+                        # Determine if this is Sales or Returns
+                        if 'Returns' in str(label):
                             month_weeks[week_key]['returns_col'] = df.columns[col_idx]
+                        elif 'Sales' in str(label):
+                            month_weeks[week_key]['sales_col'] = df.columns[col_idx]
                 
                 # Build weekly performance table
                 weekly_data = []
-                for week_key, cols in month_weeks.items():
+                for week_key, cols in sorted(month_weeks.items()):
                     if cols['sales_col'] and cols['returns_col']:
                         sales_val = pd.to_numeric(branch_row[cols['sales_col']].values[0], errors='coerce')
                         returns_val = pd.to_numeric(branch_row[cols['returns_col']].values[0], errors='coerce')
@@ -179,7 +182,7 @@ elif page == "📈 Store Analysis":
                                 monthly_summary[month]['returns'] += returns_val
                     
                     monthly_data = []
-                    for month, values in monthly_summary.items():
+                    for month, values in sorted(monthly_summary.items()):
                         sales = values['sales']
                         returns = values['returns']
                         return_pct = (returns / sales * 100) if sales > 0 else 0
@@ -228,4 +231,4 @@ elif page == "💡 Optimal Order Recommendations":
     st.info("💡 Recommendation features coming soon.")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v9.0\n\nWeek-by-week & month-by-month analysis.")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v9.1\n\nWeek-by-week & month-by-month analysis.")
