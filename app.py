@@ -16,6 +16,8 @@ page = st.sidebar.radio("Select Analysis", [
 
 if 'data' not in st.session_state:
     st.session_state.data = None
+if 'headers' not in st.session_state:
+    st.session_state.headers = None
 
 # ============================================================================
 # PAGE 1: UPLOAD DATA
@@ -26,23 +28,38 @@ if page == "📤 Upload Data":
     st.info("""
     📋 **Expected Format:**
     - CSV file with multi-row headers (rows 1-3)
+    - Row 1: Month headers
+    - Row 2: Week numbers
+    - Row 3: Metric types (Sales/Returns)
     - Data starts from row 4
-    - Column A: Customer/Product names
-    - Columns B onwards: Monthly Sales & Returns data
     """)
     
     uploaded_file = st.file_uploader("Choose a CSV file", type=['csv'])
     
     if uploaded_file is not None:
         try:
-            # Read the CSV with data starting at row 3 (0-indexed)
+            # Read header rows
+            header_rows = pd.read_csv(uploaded_file, header=None, nrows=3)
+            
+            # Read data starting from row 4 (index 3)
             df = pd.read_csv(uploaded_file, header=3)
             df.columns = df.columns.str.strip()
+            
             st.session_state.data = df
+            st.session_state.headers = header_rows
+            
             st.success("✅ Data uploaded successfully!")
             
+            st.subheader("Header Structure")
+            st.write("**Row 1 (Months):**")
+            st.write(header_rows.iloc[0].tolist()[:15])
+            st.write("**Row 2 (Weeks):**")
+            st.write(header_rows.iloc[1].tolist()[:15])
+            st.write("**Row 3 (Metrics):**")
+            st.write(header_rows.iloc[2].tolist()[:15])
+            
             st.subheader("Data Preview")
-            st.dataframe(df.head(30))
+            st.dataframe(df.head(20))
             
             st.subheader("Data Summary")
             col1, col2, col3 = st.columns(3)
@@ -59,12 +76,13 @@ if page == "📤 Upload Data":
 # PAGE 2: STORE ANALYSIS
 # ============================================================================
 elif page == "📈 Store Analysis":
-    st.header("Store-Level Analysis")
+    st.header("Store-Level Analysis - Week by Week & Month by Month")
     
     if st.session_state.data is None:
         st.warning("⚠️ Please upload data first!")
     else:
         df = st.session_state.data.copy()
+        headers = st.session_state.headers
         
         # Get first column name (contains customer/product names)
         first_col = df.columns[0]
@@ -72,7 +90,7 @@ elif page == "📈 Store Analysis":
         # Get unique customer/branch names
         all_names = df[first_col].dropna().unique()
         
-        # Filter for branch-level entries (typically contain "-" and are not product names)
+        # Filter for branch-level entries
         branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
         
         if not branches:
@@ -80,37 +98,115 @@ elif page == "📈 Store Analysis":
         else:
             selected_branch = st.selectbox("Select Branch", sorted(branches))
             
-            # Get all rows for this branch (including products under it)
-            branch_rows = df[df[first_col].str.contains(selected_branch, case=False, na=False)]
+            # Get the branch row (exact match, not containing)
+            branch_row = df[df[first_col] == selected_branch]
             
-            if len(branch_rows) > 0:
-                st.subheader(f"Analysis for {selected_branch}")
+            if len(branch_row) > 0:
+                st.subheader(f"Performance Analysis for {selected_branch}")
                 
-                # Get numeric columns (skip first column which has names)
-                numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+                # Extract header information
+                months_row = headers.iloc[0].tolist()
+                weeks_row = headers.iloc[1].tolist()
+                metrics_row = headers.iloc[2].tolist()
                 
-                # Sum all numeric data for this branch
-                total_sales = 0
-                total_returns = 0
+                # Parse the structure: identify month boundaries and weeks
+                current_month = None
+                month_weeks = {}
+                week_info = []
                 
-                for col in numeric_cols:
-                    col_sum = pd.to_numeric(branch_rows[col], errors='coerce').sum()
-                    if 'Returns' in col or 'returns' in col:
-                        total_returns += col_sum
-                    else:
-                        total_sales += col_sum
+                for col_idx in range(1, len(df.columns)):  # Skip first column (names)
+                    month = months_row[col_idx] if col_idx < len(months_row) else None
+                    week = weeks_row[col_idx] if col_idx < len(weeks_row) else None
+                    metric = metrics_row[col_idx] if col_idx < len(metrics_row) else None
+                    
+                    if pd.notna(month) and month != '':
+                        current_month = month
+                    
+                    if current_month and pd.notna(week) and week != '':
+                        week_key = f"{current_month} - W{week}"
+                        if week_key not in month_weeks:
+                            month_weeks[week_key] = {'sales_col': None, 'returns_col': None}
+                        
+                        if 'Sales' in str(metric):
+                            month_weeks[week_key]['sales_col'] = df.columns[col_idx]
+                        elif 'Returns' in str(metric):
+                            month_weeks[week_key]['returns_col'] = df.columns[col_idx]
                 
-                return_rate = (total_returns / total_sales * 100) if total_sales > 0 else 0
+                # Build weekly performance table
+                weekly_data = []
+                for week_key, cols in month_weeks.items():
+                    if cols['sales_col'] and cols['returns_col']:
+                        sales_val = pd.to_numeric(branch_row[cols['sales_col']].values[0], errors='coerce')
+                        returns_val = pd.to_numeric(branch_row[cols['returns_col']].values[0], errors='coerce')
+                        
+                        if pd.notna(sales_val) or pd.notna(returns_val):
+                            sales_val = sales_val if pd.notna(sales_val) else 0
+                            returns_val = returns_val if pd.notna(returns_val) else 0
+                            return_pct = (returns_val / sales_val * 100) if sales_val > 0 else 0
+                            
+                            weekly_data.append({
+                                'Week': week_key,
+                                'Sales': f"{sales_val:.0f}",
+                                'Returns': f"{returns_val:.0f}",
+                                'Net': f"{sales_val - returns_val:.0f}",
+                                'Return %': f"{return_pct:.1f}%"
+                            })
                 
-                col1, col2, col3, col4, col5 = st.columns(5)
-                col1.metric("Total Sales", f"{total_sales:.0f} bales")
-                col2.metric("Total Returns", f"{total_returns:.0f} bales")
-                col3.metric("Return Rate", f"{return_rate:.1f}%")
-                col4.metric("Net Sales", f"{total_sales - total_returns:.0f} bales")
-                col5.metric("Products", len(branch_rows) - 1)  # Exclude branch total row
-                
-                st.subheader("📋 Branch Data")
-                st.dataframe(branch_rows, use_container_width=True)
+                if weekly_data:
+                    st.subheader("📅 Weekly Performance")
+                    weekly_df = pd.DataFrame(weekly_data)
+                    st.dataframe(weekly_df, use_container_width=True)
+                    
+                    # Monthly summary
+                    st.subheader("📊 Monthly Summary")
+                    monthly_summary = {}
+                    
+                    for week_key, cols in month_weeks.items():
+                        month = week_key.split(' - ')[0]
+                        if month not in monthly_summary:
+                            monthly_summary[month] = {'sales': 0, 'returns': 0}
+                        
+                        if cols['sales_col'] and cols['returns_col']:
+                            sales_val = pd.to_numeric(branch_row[cols['sales_col']].values[0], errors='coerce')
+                            returns_val = pd.to_numeric(branch_row[cols['returns_col']].values[0], errors='coerce')
+                            
+                            if pd.notna(sales_val):
+                                monthly_summary[month]['sales'] += sales_val
+                            if pd.notna(returns_val):
+                                monthly_summary[month]['returns'] += returns_val
+                    
+                    monthly_data = []
+                    for month, values in monthly_summary.items():
+                        sales = values['sales']
+                        returns = values['returns']
+                        return_pct = (returns / sales * 100) if sales > 0 else 0
+                        
+                        monthly_data.append({
+                            'Month': month,
+                            'Sales': f"{sales:.0f}",
+                            'Returns': f"{returns:.0f}",
+                            'Net': f"{sales - returns:.0f}",
+                            'Return %': f"{return_pct:.1f}%"
+                        })
+                    
+                    monthly_df = pd.DataFrame(monthly_data)
+                    st.dataframe(monthly_df, use_container_width=True)
+                    
+                    # Charts
+                    st.subheader("📈 Trends")
+                    
+                    # Convert for plotting
+                    weekly_df_plot = weekly_df.copy()
+                    weekly_df_plot['Sales'] = pd.to_numeric(weekly_df_plot['Sales'])
+                    weekly_df_plot['Returns'] = pd.to_numeric(weekly_df_plot['Returns'])
+                    
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Sales'], name='Sales', marker_color='green'))
+                    fig.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Returns'], name='Returns', marker_color='red'))
+                    fig.update_layout(title="Weekly Sales vs Returns", barmode='group', height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning("⚠️ No data found for this branch")
             else:
                 st.error(f"❌ No data found for {selected_branch}")
 
@@ -119,22 +215,14 @@ elif page == "📈 Store Analysis":
 # ============================================================================
 elif page == "🤖 AI Relationship Analysis":
     st.header("AI: Relationship Analysis - Quantity, Interval & Returns")
-    
-    if st.session_state.data is None:
-        st.warning("⚠️ Please upload data first!")
-    else:
-        st.info("📊 Analysis features coming soon. Please upload data and explore Store Analysis first.")
+    st.info("📊 Analysis features coming soon.")
 
 # ============================================================================
 # PAGE 4: OPTIMAL ORDER RECOMMENDATIONS
 # ============================================================================
 elif page == "💡 Optimal Order Recommendations":
     st.header("AI: Optimal Order Pattern Recommendations")
-    
-    if st.session_state.data is None:
-        st.warning("⚠️ Please upload data first!")
-    else:
-        st.info("💡 Recommendation features coming soon. Please upload data and explore Store Analysis first.")
+    st.info("💡 Recommendation features coming soon.")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v8.0\n\nOptimized for CSV pivot table format.")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v9.0\n\nWeek-by-week & month-by-month analysis.")
