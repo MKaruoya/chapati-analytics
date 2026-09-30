@@ -96,14 +96,23 @@ elif page == "📈 Store Analysis":
                         returns_val = returns_val if pd.notna(returns_val) else 0
                         
                         # Calculate return percentage
-                        # If net sales is negative, it means returns > sales
-                        if net_sales_val >= 0:
-                            return_pct = (returns_val / (net_sales_val + returns_val) * 100) if (net_sales_val + returns_val) > 0 else 0
-                            status = "✅"
+                        # Original Order = Net Sales + Returns (absolute values)
+                        original_order = abs(net_sales_val) + returns_val
+                        
+                        if original_order > 0:
+                            return_pct = (returns_val / original_order) * 100
                         else:
-                            # Negative net sales - returns exceeded sales
-                            return_pct = 100 + (net_sales_val / returns_val * 100) if returns_val > 0 else 0
-                            status = "🔴"
+                            return_pct = 0
+                        
+                        # Determine status
+                        if net_sales_val < 0:
+                            status = "🔴"  # Negative net sales
+                        elif return_pct > 20:
+                            status = "🔴"  # High returns
+                        elif return_pct > 15:
+                            status = "🟡"  # Moderate returns
+                        else:
+                            status = "🟢"  # Good
                         
                         weekly_data.append({
                             'Week': f"W{week_num}",
@@ -125,21 +134,23 @@ elif page == "📈 Store Analysis":
                     total_returns = sum([float(row['Returns']) for row in weekly_data])
                     
                     # Calculate overall return percentage
-                    if total_net_sales >= 0:
-                        total_return_pct = (total_returns / (total_net_sales + total_returns) * 100) if (total_net_sales + total_returns) > 0 else 0
+                    total_original_order = abs(total_net_sales) + total_returns
+                    if total_original_order > 0:
+                        total_return_pct = (total_returns / total_original_order) * 100
                     else:
-                        total_return_pct = 100 + (total_net_sales / total_returns * 100) if total_returns > 0 else 0
+                        total_return_pct = 0
                     
                     st.subheader("📊 Overall Summary")
-                    col1, col2, col3 = st.columns(3)
+                    col1, col2, col3, col4 = st.columns(4)
                     
                     if total_net_sales >= 0:
-                        col1.metric("Total Net Sales", f"{total_net_sales:.0f} bales", delta=None)
+                        col1.metric("Total Net Sales", f"{total_net_sales:.0f} bales")
                     else:
                         col1.metric("Total Net Sales", f"{total_net_sales:.0f} bales", delta="🔴 NEGATIVE", delta_color="inverse")
                     
                     col2.metric("Total Returns", f"{total_returns:.0f} bales")
-                    col3.metric("Return Rate", f"{total_return_pct:.1f}%")
+                    col3.metric("Original Order", f"{total_original_order:.0f} bales")
+                    col4.metric("Return Rate", f"{total_return_pct:.1f}%")
                     
                     # Alert if negative net sales
                     if total_net_sales < 0:
@@ -294,16 +305,18 @@ elif page == "💡 Optimal Order Recommendations":
                     avg_returns = np.mean(weekly_returns)
                     
                     # Calculate return percentage
-                    if avg_net_sales >= 0:
-                        return_rate = (avg_returns / (avg_net_sales + avg_returns) * 100) if (avg_net_sales + avg_returns) > 0 else 0
+                    avg_original_order = abs(avg_net_sales) + avg_returns
+                    if avg_original_order > 0:
+                        return_rate = (avg_returns / avg_original_order) * 100
                     else:
-                        return_rate = 100 + (avg_net_sales / avg_returns * 100) if avg_returns > 0 else 0
+                        return_rate = 0
                     
                     st.subheader("📋 Current Pattern")
-                    col1, col2, col3 = st.columns(3)
+                    col1, col2, col3, col4 = st.columns(4)
                     col1.metric("Avg Weekly Net Sales", f"{avg_net_sales:.0f} bales")
                     col2.metric("Avg Weekly Returns", f"{avg_returns:.0f} bales")
-                    col3.metric("Return Rate", f"{return_rate:.1f}%")
+                    col3.metric("Avg Original Order", f"{avg_original_order:.0f} bales")
+                    col4.metric("Return Rate", f"{return_rate:.1f}%")
                     
                     st.subheader("✅ Recommendations")
                     
@@ -319,18 +332,22 @@ elif page == "💡 Optimal Order Recommendations":
                         st.write("- Reduce order quantities by 50%+")
                         st.write("- Investigate quality and handling issues immediately")
                         st.write("- Increase order frequency for fresher stock")
-                    elif return_rate > 20:
+                    elif return_rate > 30:
                         st.error("🔴 **HIGH RETURN RATE**")
-                        st.write("- Reduce order quantities by 20-25%")
+                        st.write("- Reduce order quantities by 30-40%")
                         st.write("- Investigate quality and handling issues")
                         st.write("- Increase order frequency for fresher stock")
-                    elif return_rate > 15:
+                    elif return_rate > 20:
                         st.warning("🟡 **MODERATE-HIGH RETURN RATE**")
-                        st.write("- Reduce order quantities by 10-15%")
+                        st.write("- Reduce order quantities by 20-25%")
                         st.write("- Monitor quality closely")
                         st.write("- Consider more frequent orders")
-                    elif return_rate > 10:
+                    elif return_rate > 15:
                         st.warning("🟡 **MODERATE RETURN RATE**")
+                        st.write("- Reduce order quantities by 10-15%")
+                        st.write("- Monitor returns trend")
+                    elif return_rate > 10:
+                        st.info("🟡 **ACCEPTABLE RETURN RATE**")
                         st.write("- Maintain current quantities")
                         st.write("- Monitor returns trend")
                     else:
@@ -339,4 +356,4 @@ elif page == "💡 Optimal Order Recommendations":
                         st.write("- Maintain current practices")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v12.2\n\nHandles negative net sales (returns > sales).")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v12.3\n\nCorrect return rate calculation: Returns / (|Net Sales| + Returns)")
