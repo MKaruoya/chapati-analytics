@@ -94,13 +94,23 @@ elif page == "📈 Store Analysis":
                     if pd.notna(net_sales_val) or pd.notna(returns_val):
                         net_sales_val = net_sales_val if pd.notna(net_sales_val) else 0
                         returns_val = returns_val if pd.notna(returns_val) else 0
-                        return_pct = (returns_val / (net_sales_val + returns_val) * 100) if (net_sales_val + returns_val) > 0 else 0
+                        
+                        # Calculate return percentage
+                        # If net sales is negative, it means returns > sales
+                        if net_sales_val >= 0:
+                            return_pct = (returns_val / (net_sales_val + returns_val) * 100) if (net_sales_val + returns_val) > 0 else 0
+                            status = "✅"
+                        else:
+                            # Negative net sales - returns exceeded sales
+                            return_pct = 100 + (net_sales_val / returns_val * 100) if returns_val > 0 else 0
+                            status = "🔴"
                         
                         weekly_data.append({
                             'Week': f"W{week_num}",
                             'Net Sales': f"{net_sales_val:.0f}",
                             'Returns': f"{returns_val:.0f}",
-                            'Return %': f"{return_pct:.1f}%"
+                            'Return %': f"{return_pct:.1f}%",
+                            'Status': status
                         })
                     
                     week_num += 1
@@ -113,13 +123,27 @@ elif page == "📈 Store Analysis":
                     # Calculate totals
                     total_net_sales = sum([float(row['Net Sales']) for row in weekly_data])
                     total_returns = sum([float(row['Returns']) for row in weekly_data])
-                    total_return_pct = (total_returns / (total_net_sales + total_returns) * 100) if (total_net_sales + total_returns) > 0 else 0
+                    
+                    # Calculate overall return percentage
+                    if total_net_sales >= 0:
+                        total_return_pct = (total_returns / (total_net_sales + total_returns) * 100) if (total_net_sales + total_returns) > 0 else 0
+                    else:
+                        total_return_pct = 100 + (total_net_sales / total_returns * 100) if total_returns > 0 else 0
                     
                     st.subheader("📊 Overall Summary")
                     col1, col2, col3 = st.columns(3)
-                    col1.metric("Total Net Sales", f"{total_net_sales:.0f} bales")
+                    
+                    if total_net_sales >= 0:
+                        col1.metric("Total Net Sales", f"{total_net_sales:.0f} bales", delta=None)
+                    else:
+                        col1.metric("Total Net Sales", f"{total_net_sales:.0f} bales", delta="🔴 NEGATIVE", delta_color="inverse")
+                    
                     col2.metric("Total Returns", f"{total_returns:.0f} bales")
                     col3.metric("Return Rate", f"{total_return_pct:.1f}%")
+                    
+                    # Alert if negative net sales
+                    if total_net_sales < 0:
+                        st.error(f"⚠️ **CRITICAL**: Negative net sales of {total_net_sales:.0f} bales! Returns exceeded sales by {abs(total_net_sales):.0f} bales.")
                     
                     # Charts
                     st.subheader("📈 Weekly Trends")
@@ -197,19 +221,25 @@ elif page == "🤖 AI Relationship Analysis":
                     col3.metric("Sales Variability", f"{std_net_sales:.0f} bales")
                     col4.metric("Returns Variability", f"{std_returns:.0f} bales")
                     
+                    # Check for negative net sales
+                    negative_weeks = sum(1 for x in weekly_net_sales if x < 0)
+                    if negative_weeks > 0:
+                        st.warning(f"⚠️ **{negative_weeks} weeks with negative net sales** (returns exceeded sales)")
+                    
                     # Correlation
-                    correlation = np.corrcoef(weekly_net_sales, weekly_returns)[0, 1]
-                    
-                    st.subheader("🔍 Relationship Insights")
-                    
-                    if correlation > 0.7:
-                        st.warning(f"🔴 **STRONG POSITIVE CORRELATION ({correlation:.2f})**: Higher net sales lead to higher returns. This suggests quality or handling issues.")
-                    elif correlation > 0.3:
-                        st.info(f"🟡 **MODERATE POSITIVE CORRELATION ({correlation:.2f})**: Some relationship between net sales and returns.")
-                    elif correlation > -0.3:
-                        st.success(f"🟢 **WEAK/NO CORRELATION ({correlation:.2f})**: Net sales and returns are independent.")
-                    else:
-                        st.success(f"🟢 **NEGATIVE CORRELATION ({correlation:.2f})**: Higher net sales actually lead to lower returns (good sign!).")
+                    if len(weekly_net_sales) > 1 and len(weekly_returns) > 1:
+                        correlation = np.corrcoef(weekly_net_sales, weekly_returns)[0, 1]
+                        
+                        st.subheader("🔍 Relationship Insights")
+                        
+                        if correlation > 0.7:
+                            st.warning(f"🔴 **STRONG POSITIVE CORRELATION ({correlation:.2f})**: Higher net sales lead to higher returns. This suggests quality or handling issues.")
+                        elif correlation > 0.3:
+                            st.info(f"🟡 **MODERATE POSITIVE CORRELATION ({correlation:.2f})**: Some relationship between net sales and returns.")
+                        elif correlation > -0.3:
+                            st.success(f"🟢 **WEAK/NO CORRELATION ({correlation:.2f})**: Net sales and returns are independent.")
+                        else:
+                            st.success(f"🟢 **NEGATIVE CORRELATION ({correlation:.2f})**: Higher net sales actually lead to lower returns (good sign!).")
                     
                     # Trend analysis
                     st.subheader("📈 Trend Analysis")
@@ -262,7 +292,12 @@ elif page == "💡 Optimal Order Recommendations":
                 if weekly_net_sales and weekly_returns:
                     avg_net_sales = np.mean(weekly_net_sales)
                     avg_returns = np.mean(weekly_returns)
-                    return_rate = (avg_returns / (avg_net_sales + avg_returns) * 100) if (avg_net_sales + avg_returns) > 0 else 0
+                    
+                    # Calculate return percentage
+                    if avg_net_sales >= 0:
+                        return_rate = (avg_returns / (avg_net_sales + avg_returns) * 100) if (avg_net_sales + avg_returns) > 0 else 0
+                    else:
+                        return_rate = 100 + (avg_net_sales / avg_returns * 100) if avg_returns > 0 else 0
                     
                     st.subheader("📋 Current Pattern")
                     col1, col2, col3 = st.columns(3)
@@ -272,13 +307,25 @@ elif page == "💡 Optimal Order Recommendations":
                     
                     st.subheader("✅ Recommendations")
                     
-                    if return_rate > 20:
-                        st.error("🔴 **CRITICAL - HIGH RETURN RATE**")
+                    if avg_net_sales < 0:
+                        st.error("🔴 **CRITICAL - NEGATIVE NET SALES**")
+                        st.write("- **IMMEDIATE ACTION REQUIRED**")
+                        st.write("- Returns are exceeding sales")
+                        st.write("- Reduce order quantities significantly (50%+)")
+                        st.write("- Investigate critical quality/handling issues")
+                        st.write("- Consider temporary halt to orders until issues resolved")
+                    elif return_rate > 50:
+                        st.error("🔴 **CRITICAL - EXTREMELY HIGH RETURN RATE**")
+                        st.write("- Reduce order quantities by 50%+")
+                        st.write("- Investigate quality and handling issues immediately")
+                        st.write("- Increase order frequency for fresher stock")
+                    elif return_rate > 20:
+                        st.error("🔴 **HIGH RETURN RATE**")
                         st.write("- Reduce order quantities by 20-25%")
                         st.write("- Investigate quality and handling issues")
                         st.write("- Increase order frequency for fresher stock")
                     elif return_rate > 15:
-                        st.warning("🟡 **HIGH RETURN RATE**")
+                        st.warning("🟡 **MODERATE-HIGH RETURN RATE**")
                         st.write("- Reduce order quantities by 10-15%")
                         st.write("- Monitor quality closely")
                         st.write("- Consider more frequent orders")
@@ -292,4 +339,4 @@ elif page == "💡 Optimal Order Recommendations":
                         st.write("- Maintain current practices")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v12.1\n\nWorking with Net Sales (returns already deducted).")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v12.2\n\nHandles negative net sales (returns > sales).")
