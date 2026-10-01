@@ -472,5 +472,4 @@ elif page == "💡 Optimal Order Recommendations":
     st.info("💡 Coming soon...")
 
 st.sidebar.markdown("---")
-st.sidebar.info("
 st.sidebar.info("🍞 **Chapati Analytics Agent** v18.0\n\nAdded: Volatility, Volume Context, Peer Comparison!")
