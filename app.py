@@ -81,7 +81,7 @@ if page == "📤 Upload Data":
                 st.write(f"**Filled Cells:** {filled_cells:,} / {total_cells:,}")
             
             st.subheader("✅ Ready for Analysis!")
-            st.write("Go to **Store Analysis** to view week-by-week performance for any branch.")
+            st.write("Go to **Store Analysis** to view week-by-week and month-by-month performance for any branch.")
             
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
@@ -92,7 +92,7 @@ if page == "📤 Upload Data":
 # PAGE 2: STORE ANALYSIS
 # ============================================================================
 elif page == "📈 Store Analysis":
-    st.header("Store-Level Analysis - Week by Week Performance")
+    st.header("Store-Level Analysis - Week by Week & Month by Month")
     
     if st.session_state.data is None:
         st.warning("⚠️ Please upload data first!")
@@ -155,62 +155,176 @@ elif page == "📈 Store Analysis":
                             'Net Sales': f"{net_sales_val:.0f}",
                             'Returns': f"{returns_val:.0f}",
                             'Return %': f"{return_pct:.1f}%",
-                            'Status': status
+                            'Status': status,
+                            'net_sales_numeric': net_sales_val,
+                            'returns_numeric': returns_val,
+                            'return_pct_numeric': return_pct
                         })
                     
                     week_num += 1
                 
                 if weekly_data:
+                    # ===== WEEKLY ANALYSIS =====
                     st.subheader("📅 Weekly Performance")
                     weekly_df = pd.DataFrame(weekly_data)
-                    st.dataframe(weekly_df, use_container_width=True)
+                    display_weekly = weekly_df[['Week', 'Net Sales', 'Returns', 'Return %', 'Status']].copy()
+                    st.dataframe(display_weekly, use_container_width=True)
                     
-                    # Calculate totals
-                    total_net_sales = sum([float(row['Net Sales']) for row in weekly_data])
-                    total_returns = sum([float(row['Returns']) for row in weekly_data])
+                    # ===== MONTHLY ANALYSIS =====
+                    st.subheader("📊 Monthly Performance")
                     
-                    # Calculate overall return percentage
-                    total_original_order = abs(total_net_sales) + total_returns
-                    if total_original_order > 0:
-                        total_return_pct = (total_returns / total_original_order) * 100
-                    else:
-                        total_return_pct = 0
+                    # Estimate months based on weeks
+                    # Assuming: Weeks 1-5 = Month 1, Weeks 6-10 = Month 2, etc.
+                    # But we need to be smarter - let's group by approximate month boundaries
                     
-                    st.subheader("📊 Overall Summary")
-                    col1, col2, col3, col4 = st.columns(4)
+                    weeks_per_month = 5  # Approximate
+                    monthly_data = []
                     
-                    if total_net_sales >= 0:
-                        col1.metric("Total Net Sales", f"{total_net_sales:.0f} bales")
-                    else:
-                        col1.metric("Total Net Sales", f"{total_net_sales:.0f} bales", delta="🔴 NEGATIVE", delta_color="inverse")
+                    for month_num in range(1, 10):  # Support up to 9 months
+                        start_week = (month_num - 1) * weeks_per_month
+                        end_week = month_num * weeks_per_month
+                        
+                        month_weeks = weekly_data[start_week:end_week]
+                        
+                        if month_weeks:
+                            month_sales = sum([w['net_sales_numeric'] for w in month_weeks])
+                            month_returns = sum([w['returns_numeric'] for w in month_weeks])
+                            month_original = abs(month_sales) + month_returns
+                            
+                            if month_original > 0:
+                                month_return_pct = (month_returns / month_original) * 100
+                            else:
+                                month_return_pct = 0
+                            
+                            monthly_data.append({
+                                'Month': f"M{month_num}",
+                                'Weeks': f"W{start_week+1}-W{end_week}",
+                                'Net Sales': f"{month_sales:.0f}",
+                                'Returns': f"{month_returns:.0f}",
+                                'Return %': f"{month_return_pct:.1f}%",
+                                'net_sales_numeric': month_sales,
+                                'returns_numeric': month_returns,
+                                'return_pct_numeric': month_return_pct
+                            })
                     
-                    col2.metric("Total Returns", f"{total_returns:.0f} bales")
-                    col3.metric("Original Order", f"{total_original_order:.0f} bales")
-                    col4.metric("Return Rate", f"{total_return_pct:.1f}%")
-                    
-                    # Alert if negative net sales
-                    if total_net_sales < 0:
-                        st.error(f"⚠️ **CRITICAL**: Negative net sales of {total_net_sales:.0f} bales! Returns exceeded sales by {abs(total_net_sales):.0f} bales.")
-                    
-                    # Charts
-                    st.subheader("📈 Weekly Trends")
-                    
-                    weekly_df_plot = weekly_df.copy()
-                    weekly_df_plot['Net Sales'] = pd.to_numeric(weekly_df_plot['Net Sales'])
-                    weekly_df_plot['Returns'] = pd.to_numeric(weekly_df_plot['Returns'])
-                    
-                    fig = go.Figure()
-                    fig.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Net Sales'], name='Net Sales', marker_color='green'))
-                    fig.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Returns'], name='Returns', marker_color='red'))
-                    fig.update_layout(title="Weekly Net Sales vs Returns", barmode='group', height=400)
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Line chart for trend
-                    fig2 = go.Figure()
-                    fig2.add_trace(go.Scatter(x=weekly_df_plot['Week'], y=weekly_df_plot['Net Sales'], name='Net Sales', mode='lines+markers', marker=dict(size=8)))
-                    fig2.add_trace(go.Scatter(x=weekly_df_plot['Week'], y=weekly_df_plot['Returns'], name='Returns', mode='lines+markers', marker=dict(size=8)))
-                    fig2.update_layout(title="Weekly Trend", height=400)
-                    st.plotly_chart(fig2, use_container_width=True)
+                    if monthly_data:
+                        monthly_df = pd.DataFrame(monthly_data)
+                        display_monthly = monthly_df[['Month', 'Weeks', 'Net Sales', 'Returns', 'Return %']].copy()
+                        st.dataframe(display_monthly, use_container_width=True)
+                        
+                        # ===== MONTH-OVER-MONTH TRENDS =====
+                        st.subheader("📈 Month-over-Month Trends")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.write("**Sales Trend:**")
+                            if len(monthly_data) > 1:
+                                first_month_sales = monthly_data[0]['net_sales_numeric']
+                                last_month_sales = monthly_data[-1]['net_sales_numeric']
+                                
+                                if first_month_sales != 0:
+                                    change_pct = ((last_month_sales - first_month_sales) / abs(first_month_sales)) * 100
+                                    
+                                    if change_pct > 0:
+                                        st.success(f"📈 +{change_pct:.1f}% (Growing)")
+                                    elif change_pct < 0:
+                                        st.error(f"📉 {change_pct:.1f}% (Declining)")
+                                    else:
+                                        st.info(f"➡️ 0% (Stable)")
+                                else:
+                                    st.info("No data for comparison")
+                        
+                        with col2:
+                            st.write("**Returns Trend:**")
+                            if len(monthly_data) > 1:
+                                first_month_returns = monthly_data[0]['returns_numeric']
+                                last_month_returns = monthly_data[-1]['returns_numeric']
+                                
+                                if first_month_returns != 0:
+                                    change_pct = ((last_month_returns - first_month_returns) / abs(first_month_returns)) * 100
+                                    
+                                    if change_pct < 0:
+                                        st.success(f"📉 {change_pct:.1f}% (Improving)")
+                                    elif change_pct > 0:
+                                        st.error(f"📈 +{change_pct:.1f}% (Worsening)")
+                                    else:
+                                        st.info(f"➡️ 0% (Stable)")
+                                else:
+                                    st.info("No data for comparison")
+                        
+                        with col3:
+                            st.write("**Return Rate Trend:**")
+                            if len(monthly_data) > 1:
+                                first_month_rate = monthly_data[0]['return_pct_numeric']
+                                last_month_rate = monthly_data[-1]['return_pct_numeric']
+                                change = last_month_rate - first_month_rate
+                                
+                                if change < 0:
+                                    st.success(f"📉 {change:.1f}% (Improving)")
+                                elif change > 0:
+                                    st.error(f"📈 +{change:.1f}% (Worsening)")
+                                else:
+                                    st.info(f"➡️ 0% (Stable)")
+                        
+                        # ===== OVERALL SUMMARY =====
+                        st.subheader("📊 Overall Summary")
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        total_net_sales = sum([w['net_sales_numeric'] for w in weekly_data])
+                        total_returns = sum([w['returns_numeric'] for w in weekly_data])
+                        total_original_order = abs(total_net_sales) + total_returns
+                        
+                        if total_original_order > 0:
+                            total_return_pct = (total_returns / total_original_order) * 100
+                        else:
+                            total_return_pct = 0
+                        
+                        if total_net_sales >= 0:
+                            col1.metric("Total Net Sales", f"{total_net_sales:.0f} bales")
+                        else:
+                            col1.metric("Total Net Sales", f"{total_net_sales:.0f} bales", delta="🔴 NEGATIVE", delta_color="inverse")
+                        
+                        col2.metric("Total Returns", f"{total_returns:.0f} bales")
+                        col3.metric("Original Order", f"{total_original_order:.0f} bales")
+                        col4.metric("Return Rate", f"{total_return_pct:.1f}%")
+                        
+                        # Alert if negative net sales
+                        if total_net_sales < 0:
+                            st.error(f"⚠️ **CRITICAL**: Negative net sales of {total_net_sales:.0f} bales! Returns exceeded sales by {abs(total_net_sales):.0f} bales.")
+                        
+                        # ===== CHARTS =====
+                        st.subheader("📈 Visualizations")
+                        
+                        # Monthly trend chart
+                        monthly_df_plot = monthly_df.copy()
+                        monthly_df_plot['Net Sales'] = pd.to_numeric(monthly_df_plot['net_sales_numeric'])
+                        monthly_df_plot['Returns'] = pd.to_numeric(monthly_df_plot['returns_numeric'])
+                        
+                        fig_monthly = go.Figure()
+                        fig_monthly.add_trace(go.Bar(x=monthly_df_plot['Month'], y=monthly_df_plot['Net Sales'], name='Net Sales', marker_color='green'))
+                        fig_monthly.add_trace(go.Bar(x=monthly_df_plot['Month'], y=monthly_df_plot['Returns'], name='Returns', marker_color='red'))
+                        fig_monthly.update_layout(title="Monthly Net Sales vs Returns", barmode='group', height=400)
+                        st.plotly_chart(fig_monthly, use_container_width=True)
+                        
+                        # Return rate trend
+                        fig_rate = go.Figure()
+                        fig_rate.add_trace(go.Scatter(x=monthly_df_plot['Month'], y=monthly_df_plot['return_pct_numeric'], 
+                                                      name='Return Rate', mode='lines+markers', marker=dict(size=10, color='orange')))
+                        fig_rate.update_layout(title="Monthly Return Rate Trend", height=400, yaxis_title="Return %")
+                        st.plotly_chart(fig_rate, use_container_width=True)
+                        
+                        # Weekly detail chart
+                        weekly_df_plot = weekly_df.copy()
+                        weekly_df_plot['Net Sales'] = pd.to_numeric(weekly_df_plot['net_sales_numeric'])
+                        weekly_df_plot['Returns'] = pd.to_numeric(weekly_df_plot['returns_numeric'])
+                        
+                        fig_weekly = go.Figure()
+                        fig_weekly.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Net Sales'], name='Net Sales', marker_color='green'))
+                        fig_weekly.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Returns'], name='Returns', marker_color='red'))
+                        fig_weekly.update_layout(title="Weekly Net Sales vs Returns", barmode='group', height=400)
+                        st.plotly_chart(fig_weekly, use_container_width=True)
+                
                 else:
                     st.warning("⚠️ No data found for this branch")
             else:
@@ -390,4 +504,4 @@ elif page == "💡 Optimal Order Recommendations":
                         st.write("- Maintain current practices")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v13.0\n\nCleaned upload with better data preview.")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v14.0\n\nMonth-by-month analysis added!")
