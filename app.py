@@ -2,7 +2,6 @@
 import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
-import io
 from utils import calculate_monthly_metrics, get_active_periods
 
 st.set_page_config(page_title="Chapati Analytics", layout="wide")
@@ -31,11 +30,12 @@ def calculate_volatility(monthly_data):
 
 def get_sales_volume_category(total_sales):
     """Categorize branch by sales volume"""
-    if total_sales > 500:
+    abs_sales = abs(total_sales)
+    if abs_sales > 500:
         return "High Volume"
-    elif total_sales > 200:
+    elif abs_sales > 200:
         return "Medium Volume"
-    elif total_sales > 50:
+    elif abs_sales > 50:
         return "Low Volume"
     else:
         return "Very Low Volume"
@@ -70,57 +70,61 @@ elif page == "📊 Dashboard":
         df = st.session_state.data.copy()
         all_names = df['Branch'].dropna().unique()
         branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
+        
         if not branches:
             st.warning("⚠️ No branches found in data")
         else:
             numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
             branch_metrics = []
+            
             for branch in branches:
                 branch_row = df[df['Branch'] == branch]
                 if len(branch_row) > 0:
                     monthly_data = calculate_monthly_metrics(branch_row, numeric_cols)
                     active_periods = get_active_periods(monthly_data)
+                    
                     if active_periods:
                         current_period = active_periods[-1]
                         current_period_start = current_period[0]['month_num']
                         current_period_end = current_period[-1]['month_num']
+                        
                         month_7 = monthly_data[6]
                         is_active_m7 = month_7['has_data']
+                        
                         first_active_month = active_periods[0][0]['month_num']
-                        last_active_month = active_periods[-1][-1]['month_num']
+                        
                         if is_active_m7:
                             m7_return_rate = month_7['return_rate']
                             m7_sales = month_7['sales']
                         else:
                             m7_return_rate = None
                             m7_sales = None
+                        
                         month_6 = monthly_data[5]
                         m6_return_rate = month_6['return_rate'] if month_6['has_data'] else None
+                        
                         if is_active_m7 and m6_return_rate is not None:
                             m6_m7_trend = "📉" if m7_return_rate < m6_return_rate else "📈" if m7_return_rate > m6_return_rate else "➡️"
                             m6_m7_change = m7_return_rate - m6_return_rate
                         else:
                             m6_m7_trend = None
                             m6_m7_change = None
+                        
                         first_period_start = active_periods[0][0]
                         last_period_end = active_periods[-1][-1]
+                        
                         overall_trend = "📉" if last_period_end['return_rate'] < first_period_start['return_rate'] else "📈" if last_period_end['return_rate'] > first_period_start['return_rate'] else "➡️"
                         overall_change = last_period_end['return_rate'] - first_period_start['return_rate']
+                        
                         if len(active_periods) > 1:
                             period_info = f"M{current_period_start}-M{current_period_end} (was M{first_active_month}-M{active_periods[-2][-1]['month_num']})"
-                            has_gaps = True
                         else:
                             period_info = f"M{current_period_start}-M{current_period_end}"
-                            has_gaps = False
                         
-                        # Calculate total sales and returns
                         total_sales = sum([m['sales'] for m in monthly_data])
                         total_returns = sum([m['returns'] for m in monthly_data])
                         
-                        # Volatility score
                         volatility = calculate_volatility(monthly_data)
-                        
-                        # Sales volume category
                         volume_category = get_sales_volume_category(abs(total_sales))
                         
                         if is_active_m7:
@@ -158,7 +162,6 @@ elif page == "📊 Dashboard":
                         if worsening and priority > 2:
                             priority -= 1
                         
-                        # High volatility flag
                         high_volatility = volatility > 10
                         if high_volatility and priority > 3:
                             priority -= 1
@@ -167,7 +170,6 @@ elif page == "📊 Dashboard":
                             'Branch': branch,
                             'Active Status': active_status,
                             'Period': period_info,
-                            'Has Gaps': has_gaps,
                             'M7 Return Rate': m7_return_rate,
                             'M7 Sales': m7_sales if is_active_m7 else None,
                             'M6→M7 Trend': m6_m7_trend,
@@ -182,8 +184,7 @@ elif page == "📊 Dashboard":
                             'Status': status,
                             'Priority': priority,
                             'Worsening': worsening,
-                            'monthly_data': monthly_data,
-                            'active_periods': active_periods
+                            'monthly_data': monthly_data
                         })
             
             if branch_metrics:
@@ -207,7 +208,7 @@ elif page == "📊 Dashboard":
                     display_active['M7 Return Rate'] = display_active['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
                     display_active['Volatility'] = display_active['Volatility'].apply(lambda x: f"{x:.1f}%" if x > 0 else "N/A")
                     st.dataframe(display_active, use_container_width=True)
-                    st.info("💡 **Volume Category:** Sales magnitude | **Volatility:** Return rate consistency | **M6→M7:** Latest trend | **Overall:** First to last active month")
+                    st.info("💡 **Volume Category:** Sales magnitude | **Volatility:** Return rate consistency | **M6→M7:** Latest trend")
                 
                 critical_branches = metrics_df[metrics_df['Status'].str.contains('CRITICAL|HIGH')].sort_values('Priority')
                 if len(critical_branches) > 0:
@@ -242,7 +243,6 @@ elif page == "📊 Dashboard":
                     st.dataframe(display_delisted, use_container_width=True)
                 
                 st.subheader("📊 Visualizations")
-                
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
@@ -253,8 +253,8 @@ elif page == "📊 Dashboard":
                     st.plotly_chart(fig_returns, use_container_width=True)
                 
                 with col2:
-                    fig_volume = go.Figure()
                     volume_counts = metrics_df['Volume Category'].value_counts()
+                    fig_volume = go.Figure()
                     fig_volume.add_trace(go.Bar(x=volume_counts.index, y=volume_counts.values, marker_color=['darkgreen', 'green', 'orange', 'red']))
                     fig_volume.update_layout(title="Branches by Sales Volume", height=400)
                     st.plotly_chart(fig_volume, use_container_width=True)
@@ -267,7 +267,6 @@ elif page == "📊 Dashboard":
                     st.plotly_chart(fig_volatility, use_container_width=True)
                 
                 st.subheader("📈 Trend Analysis")
-                
                 col1, col2 = st.columns(2)
                 
                 with col1:
@@ -288,9 +287,7 @@ elif page == "📊 Dashboard":
                     st.plotly_chart(fig_overall, use_container_width=True)
                 
                 st.subheader("🔍 Peer Comparison")
-                
                 active_only = metrics_df[metrics_df['Active Status'] == 'Active'].copy()
-                
                 col1, col2 = st.columns(2)
                 
                 with col1:
@@ -467,7 +464,7 @@ elif page == "📈 Store Analysis":
                         st.plotly_chart(fig_weekly, use_container_width=True)
 
 elif page == "🤖 AI Relationship Analysis":
-        st.header("AI: Relationship Analysis")
+    st.header("AI: Relationship Analysis")
     st.info("📊 Coming soon...")
 
 elif page == "💡 Optimal Order Recommendations":
@@ -475,4 +472,5 @@ elif page == "💡 Optimal Order Recommendations":
     st.info("💡 Coming soon...")
 
 st.sidebar.markdown("---")
+st.sidebar.info("
 st.sidebar.info("🍞 **Chapati Analytics Agent** v18.0\n\nAdded: Volatility, Volume Context, Peer Comparison!")
