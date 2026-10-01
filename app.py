@@ -51,18 +51,15 @@ def calculate_quarter_trend(monthly_data):
     if len(active_months) < 3:
         return None, None, None
     
-    # Last Quarter = Last 3 months with data
     last_quarter = active_months[-3:]
     last_quarter_avg = np.mean([m['return_rate'] for m in last_quarter])
     
-    # Previous Quarter = 3 months before that
     if len(active_months) >= 6:
         prev_quarter = active_months[-6:-3]
         prev_quarter_avg = np.mean([m['return_rate'] for m in prev_quarter])
     else:
         prev_quarter_avg = None
     
-    # Calculate trend
     if prev_quarter_avg is not None:
         quarter_change = last_quarter_avg - prev_quarter_avg
         if quarter_change < -2:
@@ -145,7 +142,6 @@ elif page == "📊 Dashboard":
                             m7_return_rate = None
                             m7_sales = None
                         
-                        # Calculate Quarter Trend
                         last_quarter_avg, quarter_change, quarter_trend = calculate_quarter_trend(monthly_data)
                         
                         first_period_start = active_periods[0][0]
@@ -190,7 +186,6 @@ elif page == "📊 Dashboard":
                             active_status = "Delisted"
                             m7_return_rate = last_return_rate
                         
-                        # Worsening flag based on quarter trend
                         worsening = quarter_change is not None and quarter_change > 2
                         high_volatility = volatility > 10
                         
@@ -270,16 +265,47 @@ elif page == "📊 Dashboard":
                     active_only = metrics_df[metrics_df['Active Status'] == 'Active']
                     if len(active_only) > 0:
                         fig = go.Figure()
-                        fig.add_trace(go.Bar(x=active_only['Branch'], y=active_only['M7 Return Rate'], marker=dict(color=active_only['M7 Return Rate'], colorscale='RdYlGn_r')))
-                        fig.update_layout(title=f"Month 7 Return Rate - {selected_outlet}", height=400, xaxis_tickangle=-45)
+                        fig.add_trace(go.Bar(
+                            x=active_only['Branch'],
+                            y=active_only['M7 Return Rate'],
+                            marker=dict(color=active_only['M7 Return Rate'], colorscale='RdYlGn_r'),
+                            text=active_only['M7 Return Rate'].apply(lambda x: f"{x:.1f}%"),
+                            textposition='auto',
+                            hovertemplate='<b>%{x}</b><br>Return Rate: %{y:.1f}%<extra></extra>'
+                        ))
+                        fig.update_layout(
+                            title=f"Month 7 Return Rate - {selected_outlet}",
+                            height=500,
+                            xaxis_tickangle=-45,
+                            xaxis=dict(automargin=True),
+                            yaxis_title="Return Rate (%)"
+                        )
                         st.plotly_chart(fig, use_container_width=True)
                 
                 with col2:
                     active_only = metrics_df[metrics_df['Active Status'] == 'Active']
                     if len(active_only) > 0:
                         fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=active_only['M7 Return Rate'], y=active_only['Volatility'], mode='markers', marker=dict(size=12, color=active_only['M7 Return Rate'], colorscale='RdYlGn_r'), text=active_only['Branch'], hovertemplate='<b>%{text}</b><br>Return Rate: %{x:.1f}%<br>Volatility: %{y:.1f}%<extra></extra>'))
-                        fig.update_layout(title="Return Rate vs Volatility", xaxis_title="Return Rate (%)", yaxis_title="Volatility (%)", height=400)
+                        fig.add_trace(go.Scatter(
+                            x=active_only['M7 Return Rate'],
+                            y=active_only['Volatility'],
+                            mode='markers',
+                            marker=dict(
+                                size=12,
+                                color=active_only['M7 Return Rate'],
+                                colorscale='RdYlGn_r',
+                                showscale=True,
+                                colorbar=dict(title="Return Rate (%)")
+                            ),
+                            text=active_only['Branch'],
+                            hovertemplate='<b>%{text}</b><br>Return Rate: %{x:.1f}%<br>Volatility: %{y:.1f}%<extra></extra>'
+                        ))
+                        fig.update_layout(
+                            title="Return Rate vs Volatility",
+                            xaxis_title="Return Rate (%)",
+                            yaxis_title="Volatility (%)",
+                            height=500
+                        )
                         st.plotly_chart(fig, use_container_width=True)
                 
                 st.subheader("🔍 Branch Comparison")
@@ -388,4 +414,4 @@ elif page == "💡 Optimal Order Recommendations":
     st.info("💡 Coming soon...")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v22.0\n\nQuarter trend analysis added!")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v23.0\n\nFixed visualization - full branch names!")
