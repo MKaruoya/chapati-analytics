@@ -72,22 +72,18 @@ def calculate_weekly_metrics(branch_row, numeric_cols):
 def find_optimal_quantity(weekly_data):
     """Find optimal order quantity for a branch"""
     
-    # Filter out zero orders
     active_weeks = [w for w in weekly_data if w['order_quantity'] > 0]
     
     if not active_weeks:
-        return None, None, None, "No order data"
+        return None, None, None, "No order data", 0
     
-    # Create bins of order quantities
     quantities = [w['order_quantity'] for w in active_weeks]
     returns = [w['return_pct'] for w in active_weeks]
     
-    # Find quartiles
     q1 = np.percentile(quantities, 25)
-    q2 = np.percentile(quantities, 50)  # median
+    q2 = np.percentile(quantities, 50)
     q3 = np.percentile(quantities, 75)
     
-    # Calculate average return rate for each quartile
     q1_returns = [r for q, r in zip(quantities, returns) if q <= q1]
     q2_returns = [r for q, r in zip(quantities, returns) if q1 < q <= q3]
     q3_returns = [r for q, r in zip(quantities, returns) if q > q3]
@@ -96,7 +92,6 @@ def find_optimal_quantity(weekly_data):
     avg_q2_return = np.mean(q2_returns) if q2_returns else 0
     avg_q3_return = np.mean(q3_returns) if q3_returns else 0
     
-    # Find which quartile has lowest return rate
     quartile_returns = {
         'Q1 (Low)': (q1, avg_q1_return),
         'Q2 (Medium)': (q2, avg_q2_return),
@@ -107,10 +102,13 @@ def find_optimal_quantity(weekly_data):
     optimal_qty = best_quartile[1][0]
     optimal_return_rate = best_quartile[1][1]
     
-    # Calculate correlation
     corr = np.corrcoef(quantities, returns)[0, 1]
     
-    return optimal_qty, optimal_return_rate, corr, best_quartile[0]
+    # Calculate confidence based on data consistency
+    current_avg_return = np.mean(returns)
+    confidence = min(len(active_weeks) / 35, 1.0)  # 35 weeks is full period
+    
+    return optimal_qty, optimal_return_rate, corr, best_quartile[0], confidence
 
 if page == "📤 Upload Data":
     st.header("Upload Chapati Order Data (CSV)")
@@ -130,7 +128,7 @@ if page == "📤 Upload Data":
             col3.metric("Unique Branches", df['Branch'].nunique())
             col4.metric("Data Pairs (Weeks)", (len(df.columns) - 1) // 2)
             st.subheader("✅ Ready for Analysis!")
-            st.write("Go to **AI Relationship Analysis** to analyze individual branches.")
+            st.write("Go to **Optimal Order Recommendations** to get personalized suggestions for each store.")
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
 
@@ -149,7 +147,14 @@ elif page == "📈 Store Analysis":
         st.info("Store Analysis tab - navigate to other tabs for analysis")
 
 elif page == "🤖 AI Relationship Analysis":
-    st.header("🤖 AI Relationship Analysis: Individual Branch Weekly Analysis")
+    st.header("🤖 AI Relationship Analysis")
+    if st.session_state.data is None:
+        st.warning("⚠️ Please upload data first!")
+    else:
+        st.info("AI Relationship Analysis tab - navigate to other tabs for analysis")
+
+elif page == "💡 Optimal Order Recommendations":
+    st.header("💡 Optimal Order Recommendations for Each Store")
     
     if st.session_state.data is None:
         st.warning("⚠️ Please upload data first!")
@@ -158,134 +163,265 @@ elif page == "🤖 AI Relationship Analysis":
         all_names = df['Branch'].dropna().unique()
         
         valid_branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
+        outlet_names = sorted(set([extract_outlet_name(b) for b in valid_branches if extract_outlet_name(b)]))
         
-        if not valid_branches:
-            st.error("❌ No branches found in data!")
+        if not outlet_names:
+            st.error("❌ No outlets found in data!")
         else:
-            st.subheader("🏪 Select Branch to Analyze")
-            selected_branch = st.selectbox("Choose a branch:", sorted(valid_branches), key="ai_branch")
+            st.subheader("🏪 Select Outlet")
+            selected_outlet = st.selectbox("Choose an outlet:", outlet_names, key="rec_outlet")
             
-            branch_row = df[df['Branch'] == selected_branch]
+            outlet_branches = [b for b in valid_branches if extract_outlet_name(b) == selected_outlet]
             
-            if len(branch_row) > 0:
-                numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
-                weekly_data = calculate_weekly_metrics(branch_row, numeric_cols)
-                
-                if weekly_data:
-                    weekly_df = pd.DataFrame(weekly_data)
+            st.info(f"📍 Generating recommendations for **{selected_outlet}** - {len(outlet_branches)} branches")
+            
+            numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
+            recommendations = []
+            
+            for branch in outlet_branches:
+                branch_row = df[df['Branch'] == branch]
+                if len(branch_row) > 0:
+                    weekly_data = calculate_weekly_metrics(branch_row, numeric_cols)
                     
-                    st.info(f"📍 Analyzing **{selected_branch}** - {len(weekly_data)} weeks of data")
-                    
-                    # Calculate metrics
-                    active_weeks = weekly_df[weekly_df['order_quantity'] > 0]
-                    optimal_qty, optimal_return_rate, corr, best_quartile = find_optimal_quantity(weekly_data)
-                    
-                    st.subheader("📊 Weekly Correlation Analysis")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.write("**Correlation:**")
-                        st.metric("Order Qty vs Return Rate", f"{corr:.3f}")
+                    if weekly_data:
+                        active_weeks = [w for w in weekly_data if w['order_quantity'] > 0]
                         
-                        if corr > 0.3:
-                            st.error("🔴 Positive: Larger orders = Higher returns")
-                        elif corr < -0.3:
-                            st.success("🟢 Negative: Larger orders = Lower returns")
-                        else:
-                            st.info("🟡 Weak: Independent relationship")
-                    
-                    with col2:
-                        st.write("**Weekly Statistics:**")
-                        st.write(f"Total weeks: {len(weekly_df)}")
-                        st.write(f"Active weeks: {len(active_weeks)}")
-                        st.write(f"Avg order: {active_weeks['order_quantity'].mean():.0f} bales")
-                        st.write(f"Avg return rate: {active_weeks['return_pct'].mean():.1f}%")
-                    
-                    with col3:
-                        st.write("**Order Range:**")
-                        st.write(f"Min: {active_weeks['order_quantity'].min():.0f} bales")
-                        st.write(f"Max: {active_weeks['order_quantity'].max():.0f} bales")
-                        st.write(f"Median: {active_weeks['order_quantity'].median():.0f} bales")
-                    
-                    st.subheader("📈 Weekly Order Quantity vs Return Rate")
-                    
+                        if active_weeks:
+                            current_avg_qty = np.mean([w['order_quantity'] for w in active_weeks])
+                            current_avg_return = np.mean([w['return_pct'] for w in active_weeks])
+                            
+                            optimal_qty, optimal_return_rate, corr, best_quartile, confidence = find_optimal_quantity(weekly_data)
+                            
+                            if optimal_qty:
+                                qty_change_pct = ((optimal_qty - current_avg_qty) / current_avg_qty * 100)
+                                expected_improvement = current_avg_return - optimal_return_rate
+                                
+                                # Determine status
+                                if current_avg_return > 25:
+                                    status = "🔴 CRITICAL"
+                                    priority = 1
+                                elif current_avg_return > 20:
+                                    status = "🔴 HIGH"
+                                    priority = 2
+                                elif current_avg_return > 15:
+                                    status = "🟡 MODERATE"
+                                    priority = 3
+                                else:
+                                    status = "🟢 GOOD"
+                                    priority = 4
+                                
+                                recommendations.append({
+                                    'Branch': branch,
+                                    'Current Qty': current_avg_qty,
+                                    'Current Return %': current_avg_return,
+                                    'Recommended Qty': optimal_qty,
+                                    'Expected Return %': optimal_return_rate,
+                                    'Qty Change %': qty_change_pct,
+                                    'Expected Improvement': expected_improvement,
+                                    'Confidence': confidence,
+                                    'Status': status,
+                                    'Priority': priority,
+                                    'Correlation': corr,
+                                    'Best Quartile': best_quartile
+                                })
+            
+            if recommendations:
+                rec_df = pd.DataFrame(recommendations)
+                rec_df = rec_df.sort_values('Priority')
+                
+                st.subheader("📊 Summary")
+                col1, col2, col3, col4, col5 = st.columns(5)
+                col1.metric("Total Branches", len(rec_df))
+                col2.metric("Avg Current Qty", f"{rec_df['Current Qty'].mean():.0f} bales")
+                col3.metric("Avg Recommended Qty", f"{rec_df['Recommended Qty'].mean():.0f} bales")
+                col4.metric("Avg Current Return %", f"{rec_df['Current Return %'].mean():.1f}%")
+                col5.metric("Avg Expected Return %", f"{rec_df['Expected Return %'].mean():.1f}%")
+                
+                st.subheader("🎯 Recommendations by Priority")
+                
+                # Critical branches first
+                critical = rec_df[rec_df['Priority'] <= 2]
+                if len(critical) > 0:
+                    st.write("### 🔴 Critical & High Priority Branches")
+                    for idx, row in critical.iterrows():
+                        with st.expander(f"{row['Status']} {row['Branch']} | Current: {row['Current Qty']:.0f} bales ({row['Current Return %']:.1f}% returns)"):
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                st.write("**Current Pattern:**")
+                                st.metric("Weekly Order", f"{row['Current Qty']:.0f} bales")
+                                st.metric("Return Rate", f"{row['Current Return %']:.1f}%")
+                            
+                            with col2:
+                                st.write("**Recommended Pattern:**")
+                                st.metric("Weekly Order", f"{row['Recommended Qty']:.0f} bales")
+                                st.metric("Return Rate", f"{row['Expected Return %']:.1f}%")
+                            
+                            with col3:
+                                st.write("**Impact:**")
+                                if row['Qty Change %'] < 0:
+                                    st.metric("Qty Change", f"{row['Qty Change %']:.1f}%", delta="Reduce")
+                                elif row['Qty Change %'] > 0:
+                                    st.metric("Qty Change", f"{row['Qty Change %']:+.1f}%", delta="Increase")
+                                else:
+                                    st.metric("Qty Change", "0%", delta="Maintain")
+                                st.metric("Return Reduction", f"{row['Expected Improvement']:.1f}%")
+                            
+                            st.write("---")
+                            st.write(f"**Confidence:** {row['Confidence']*100:.0f}%")
+                            st.write(f"**Correlation (Qty vs Returns):** {row['Correlation']:.3f}")
+                            st.write(f"**Best Quartile:** {row['Best Quartile']}")
+                
+                # Moderate branches
+                moderate = rec_df[rec_df['Priority'] == 3]
+                if len(moderate) > 0:
+                    st.write("### 🟡 Moderate Priority Branches")
+                    for idx, row in moderate.iterrows():
+                        with st.expander(f"{row['Status']} {row['Branch']} | Current: {row['Current Qty']:.0f} bales ({row['Current Return %']:.1f}% returns)"):
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                st.write("**Current Pattern:**")
+                                st.metric("Weekly Order", f"{row['Current Qty']:.0f} bales")
+                                st.metric("Return Rate", f"{row['Current Return %']:.1f}%")
+                            
+                            with col2:
+                                st.write("**Recommended Pattern:**")
+                                st.metric("Weekly Order", f"{row['Recommended Qty']:.0f} bales")
+                                st.metric("Return Rate", f"{row['Expected Return %']:.1f}%")
+                            
+                            with col3:
+                                st.write("**Impact:**")
+                                if row['Qty Change %'] < 0:
+                                    st.metric("Qty Change", f"{row['Qty Change %']:.1f}%", delta="Reduce")
+                                elif row['Qty Change %'] > 0:
+                                    st.metric("Qty Change", f"{row['Qty Change %']:+.1f}%", delta="Increase")
+                                else:
+                                    st.metric("Qty Change", "0%", delta="Maintain")
+                                st.metric("Return Reduction", f"{row['Expected Improvement']:.1f}%")
+                            
+                            st.write("---")
+                            st.write(f"**Confidence:** {row['Confidence']*100:.0f}%")
+                
+                # Good branches
+                good = rec_df[rec_df['Priority'] >= 4]
+                if len(good) > 0:
+                    st.write("### 🟢 Good Performing Branches")
+                    for idx, row in good.iterrows():
+                        with st.expander(f"{row['Status']} {row['Branch']} | Current: {row['Current Qty']:.0f} bales ({row['Current Return %']:.1f}% returns)"):
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                st.write("**Current Pattern:**")
+                                st.metric("Weekly Order", f"{row['Current Qty']:.0f} bales")
+                                st.metric("Return Rate", f"{row['Current Return %']:.1f}%")
+                            
+                            with col2:
+                                st.write("**Recommended Pattern:**")
+                                st.metric("Weekly Order", f"{row['Recommended Qty']:.0f} bales")
+                                st.metric("Return Rate", f"{row['Expected Return %']:.1f}%")
+                            
+                            with col3:
+                                st.write("**Impact:**")
+                                if row['Qty Change %'] < 0:
+                                    st.metric("Qty Change", f"{row['Qty Change %']:.1f}%", delta="Reduce")
+                                elif row['Qty Change %'] > 0:
+                                    st.metric("Qty Change", f"{row['Qty Change %']:+.1f}%", delta="Increase")
+                                else:
+                                    st.metric("Qty Change", "0%", delta="Maintain")
+                                st.metric("Return Reduction", f"{row['Expected Improvement']:.1f}%")
+                
+                st.subheader("📈 Visualizations")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
                     fig = go.Figure()
                     
-                    fig.add_trace(go.Scatter(
-                        x=weekly_df['order_quantity'],
-                        y=weekly_df['return_pct'],
-                        mode='markers',
-                        marker=dict(
-                            size=8,
-                            color=weekly_df['return_pct'],
-                            colorscale='RdYlGn_r',
-                            showscale=True,
-                            colorbar=dict(title="Return %")
-                        ),
-                        text=[f"Week {w}<br>Order: {q:.0f} bales<br>Return: {r:.1f}%" 
-                              for w, q, r in zip(weekly_df['week'], weekly_df['order_quantity'], weekly_df['return_pct'])],
-                        hovertemplate='%{text}<extra></extra>'
+                    fig.add_trace(go.Bar(
+                        x=rec_df['Branch'],
+                        y=rec_df['Current Qty'],
+                        name='Current Weekly Order',
+                        marker_color='lightblue'
                     ))
                     
-                    # Add trend line
-                    if len(active_weeks) > 1:
-                        z = np.polyfit(active_weeks['order_quantity'], active_weeks['return_pct'], 1)
-                        p = np.poly1d(z)
-                        x_trend = np.linspace(active_weeks['order_quantity'].min(), active_weeks['order_quantity'].max(), 100)
-                        fig.add_trace(go.Scatter(
-                            x=x_trend,
-                            y=p(x_trend),
-                            mode='lines',
-                            name='Trend',
-                            line=dict(color='red', dash='dash', width=2)
-                        ))
+                    fig.add_trace(go.Bar(
+                        x=rec_df['Branch'],
+                        y=rec_df['Recommended Qty'],
+                        name='Recommended Weekly Order',
+                        marker_color='darkblue'
+                    ))
                     
                     fig.update_layout(
-                        title=f"Weekly Order Quantity vs Return Rate - {selected_branch}",
-                        xaxis_title="Weekly Order Quantity (bales)",
-                        yaxis_title="Weekly Return Rate (%)",
-                        height=500
+                        title=f"Current vs Recommended Weekly Order Quantities - {selected_outlet}",
+                        xaxis_title="Branch",
+                        yaxis_title="Order Quantity (bales)",
+                        barmode='group',
+                        height=500,
+                        xaxis_tickangle=-45
                     )
+                    
                     st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    fig2 = go.Figure()
                     
-                    st.subheader("🎯 Optimal Order Quantity Analysis")
+                    fig2.add_trace(go.Bar(
+                        x=rec_df['Branch'],
+                        y=rec_df['Current Return %'],
+                        name='Current Return Rate',
+                        marker_color='red'
+                    ))
                     
-                    col1, col2, col3 = st.columns(3)
+                    fig2.add_trace(go.Bar(
+                        x=rec_df['Branch'],
+                        y=rec_df['Expected Return %'],
+                        name='Expected Return Rate',
+                        marker_color='green'
+                    ))
                     
-                    with col1:
-                        st.write("**Current Pattern:**")
-                        st.metric("Avg Weekly Order", f"{active_weeks['order_quantity'].mean():.0f} bales")
-                        st.metric("Avg Return Rate", f"{active_weeks['return_pct'].mean():.1f}%")
+                    fig2.update_layout(
+                        title=f"Return Rate: Current vs Expected - {selected_outlet}",
+                        xaxis_title="Branch",
+                        yaxis_title="Return Rate (%)",
+                        barmode='group',
+                        height=500,
+                        xaxis_tickangle=-45
+                    )
                     
-                    with col2:
-                        st.write("**Optimal Pattern:**")
-                        st.metric("Recommended Order", f"{optimal_qty:.0f} bales")
-                        st.metric("Expected Return Rate", f"{optimal_return_rate:.1f}%")
-                    
-                    with col3:
-                        st.write("**Improvement:**")
-                        current_avg_return = active_weeks['return_pct'].mean()
-                        improvement = current_avg_return - optimal_return_rate
-                        improvement_pct = (improvement / current_avg_return * 100) if current_avg_return > 0 else 0
-                        st.metric("Return Reduction", f"{improvement:.1f}%")
-                        st.metric("Improvement %", f"{improvement_pct:.1f}%")
-                    
-                    st.write(f"**Best Quartile:** {best_quartile}")
-                    
-                    st.subheader("📊 Weekly Data Table")
-                    
-                    display_weekly = weekly_df.copy()
-                    display_weekly['order_quantity'] = display_weekly['order_quantity'].apply(lambda x: f"{x:.0f}")
-                    display_weekly['return_pct'] = display_weekly['return_pct'].apply(lambda x: f"{x:.1f}%")
-                    display_weekly['net_sales'] = display_weekly['net_sales'].apply(lambda x: f"{x:.0f}")
-                    display_weekly['returns'] = display_weekly['returns'].apply(lambda x: f"{x:.0f}")
-                    
-                    st.dataframe(display_weekly, use_container_width=True)
-
-elif page == "💡 Optimal Order Recommendations":
-    st.header("💡 Optimal Order Recommendations")
-    st.info("💡 Coming soon - will use individual branch analysis...")
+                    st.plotly_chart(fig2, use_container_width=True)
+                
+                st.subheader("📋 Export Recommendations")
+                
+                export_df = rec_df[[
+                    'Branch', 'Current Qty', 'Recommended Qty', 'Qty Change %',
+                    'Current Return %', 'Expected Return %', 'Expected Improvement',
+                    'Confidence', 'Status'
+                ]].copy()
+                
+                export_df.columns = [
+                    'Branch', 'Current Weekly Qty (bales)', 'Recommended Weekly Qty (bales)', 'Change %',
+                    'Current Return Rate %', 'Expected Return Rate %', 'Expected Improvement %',
+                    'Confidence', 'Status'
+                ]
+                
+                export_df['Current Weekly Qty (bales)'] = export_df['Current Weekly Qty (bales)'].apply(lambda x: f"{x:.0f}")
+                export_df['Recommended Weekly Qty (bales)'] = export_df['Recommended Weekly Qty (bales)'].apply(lambda x: f"{x:.0f}")
+                export_df['Change %'] = export_df['Change %'].apply(lambda x: f"{x:.1f}%")
+                export_df['Current Return Rate %'] = export_df['Current Return Rate %'].apply(lambda x: f"{x:.1f}%")
+                export_df['Expected Return Rate %'] = export_df['Expected Return Rate %'].apply(lambda x: f"{x:.1f}%")
+                export_df['Expected Improvement %'] = export_df['Expected Improvement %'].apply(lambda x: f"{x:.1f}%")
+                export_df['Confidence'] = export_df['Confidence'].apply(lambda x: f"{x*100:.0f}%")
+                
+                st.dataframe(export_df, use_container_width=True)
+                
+                csv = export_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Recommendations as CSV",
+                    data=csv,
+                    file_name=f"optimal_weekly_orders_{selected_outlet}.csv",
+                    mime="text/csv"
+                )
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v29.0\n\nIndividual Branch Weekly Analysis!")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v30.0\n\nOptimal Order Recommendations Complete!")
