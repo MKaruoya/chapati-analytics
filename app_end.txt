@@ -1,0 +1,10 @@
+﻿elif page == "🤖 AI Relationship Analysis":
+    st.header("AI: Relationship Analysis")
+    st.info("📊 Coming soon...")
+
+elif page == "💡 Optimal Order Recommendations":
+    st.header("AI: Optimal Order Recommendations")
+    st.info("💡 Coming soon...")
+
+st.sidebar.markdown("---")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v18.0\n\nAdded: Volatility, Volume Context, Peer Comparison!")

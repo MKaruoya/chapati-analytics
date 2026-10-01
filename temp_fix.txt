@@ -1,0 +1,5 @@
+﻿                        fig_weekly = go.Figure()
+                        fig_weekly.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Net Sales'], name='Net Sales', marker_color='green'))
+                        fig_weekly.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Returns'], name='Returns', marker_color='red'))
+                        fig_weekly.update_layout(title="Weekly Net Sales vs Returns", barmode='group', height=400)
+                        st.plotly_chart(fig_weekly, use_container_width=True)
