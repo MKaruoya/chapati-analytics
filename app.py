@@ -9,16 +9,16 @@ st.set_page_config(page_title="Chapati Analytics", layout="wide")
 st.markdown("""
 <style>
     * { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    h1 { font-size: 32px; font-weight: 700; color: #2c3e50; margin-bottom: 0.3rem; }
-    h2 { font-size: 20px; font-weight: 600; color: #34495e; margin-top: 1.5rem; border-bottom: 3px solid #3498db; padding-bottom: 0.7rem; }
-    h3 { font-size: 15px; font-weight: 600; color: #34495e; }
-    .stMetric { background: linear-gradient(135deg, #ecf0f1 0%, #f8f9fa 100%); padding: 1.2rem; border-radius: 8px; border-left: 4px solid #3498db; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .stDataFrame { font-size: 13px; }
-    .header-box { background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; }
+    h1 { font-size: 24px; font-weight: 600; color: #1a1a1a; margin-bottom: 0.3rem; }
+    h2 { font-size: 16px; font-weight: 600; color: #2c3e50; margin-top: 1.2rem; border-bottom: 1px solid #e0e0e0; padding-bottom: 0.4rem; }
+    h3 { font-size: 13px; font-weight: 600; color: #34495e; }
+    .stMetric { background: #f8f9fa; padding: 0.8rem; border-radius: 4px; border: 1px solid #e0e0e0; }
+    .stDataFrame { font-size: 12px; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="header-box"><h1 style="color: white; margin: 0;">Chapati Analytics</h1><p style="color: #ecf0f1; margin: 0.5rem 0 0 0;">Data-driven order optimization for retail distribution</p></div>', unsafe_allow_html=True)
+st.title("Chapati Analytics")
+st.caption("Data-driven order optimization for retail distribution")
 
 st.sidebar.header("Navigation")
 page = st.sidebar.radio("Select", ["Upload Data", "Dashboard", "Store Analysis", "Relationship Analysis", "Order Recommendations"], label_visibility="collapsed")
@@ -199,15 +199,15 @@ elif page == "Dashboard":
                     active_only = metrics_df[metrics_df['Active Status'] == 'Active']
                     if len(active_only) > 0:
                         fig = go.Figure()
-                        fig.add_trace(go.Bar(x=active_only['Branch'], y=active_only['M7 Return Rate'], marker=dict(color=active_only['M7 Return Rate'], colorscale='RdYlGn_r', line=dict(color='#2c3e50', width=1))))
-                        fig.update_layout(title="Return Rate by Branch", height=550, xaxis_tickangle=-45, showlegend=False, font=dict(size=12), title_font_size=16)
+                        fig.add_trace(go.Bar(x=active_only['Branch'], y=active_only['M7 Return Rate'], marker=dict(color=active_only['M7 Return Rate'], colorscale='RdYlGn_r')))
+                        fig.update_layout(title="Return Rate by Branch", height=400, xaxis_tickangle=-45, showlegend=False)
                         st.plotly_chart(fig, use_container_width=True)
                 with col2:
                     active_only = metrics_df[metrics_df['Active Status'] == 'Active']
                     if len(active_only) > 0:
                         fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=active_only['M7 Return Rate'], y=active_only['Volatility'], mode='markers', marker=dict(size=14, color=active_only['M7 Return Rate'], colorscale='RdYlGn_r', line=dict(color='#2c3e50', width=2)), text=active_only['Branch']))
-                        fig.update_layout(title="Return Rate vs Volatility", xaxis_title="Return Rate (%)", yaxis_title="Volatility (%)", height=550, showlegend=False, font=dict(size=12), title_font_size=16)
+                        fig.add_trace(go.Scatter(x=active_only['M7 Return Rate'], y=active_only['Volatility'], mode='markers', marker=dict(size=8, color=active_only['M7 Return Rate'], colorscale='RdYlGn_r'), text=active_only['Branch']))
+                        fig.update_layout(title="Return Rate vs Volatility", xaxis_title="Return Rate (%)", yaxis_title="Volatility (%)", height=400, showlegend=False)
                         st.plotly_chart(fig, use_container_width=True)
 
 elif page == "Store Analysis":
@@ -260,9 +260,9 @@ elif page == "Store Analysis":
                         monthly_df_plot['Net Sales'] = pd.to_numeric(monthly_df_plot['net_sales_numeric'])
                         monthly_df_plot['Returns'] = pd.to_numeric(monthly_df_plot['returns_numeric'])
                         fig = go.Figure()
-                        fig.add_trace(go.Bar(x=monthly_df_plot['Month'], y=monthly_df_plot['Net Sales'], name='Net Sales', marker_color='#27ae60', marker_line=dict(color='#1e8449', width=1)))
-                        fig.add_trace(go.Bar(x=monthly_df_plot['Month'], y=monthly_df_plot['Returns'], name='Returns', marker_color='#e74c3c', marker_line=dict(color='#c0392b', width=1)))
-                        fig.update_layout(title="Monthly Net Sales vs Returns", barmode='group', height=550, showlegend=True, font=dict(size=12), title_font_size=16)
+                        fig.add_trace(go.Bar(x=monthly_df_plot['Month'], y=monthly_df_plot['Net Sales'], name='Net Sales', marker_color='#3498db'))
+                        fig.add_trace(go.Bar(x=monthly_df_plot['Month'], y=monthly_df_plot['Returns'], name='Returns', marker_color='#e74c3c'))
+                        fig.update_layout(title="Monthly Net Sales vs Returns", barmode='group', height=400, showlegend=True)
                         st.plotly_chart(fig, use_container_width=True)
 
 elif page == "Relationship Analysis":
@@ -290,13 +290,13 @@ elif page == "Relationship Analysis":
                     col3.metric("Avg Return Rate", f"{active_weeks['return_pct'].mean():.1f}%")
                     st.subheader("Scatter Plot")
                     fig = go.Figure()
-                    fig.add_trace(go.Scatter(x=weekly_df['order_quantity'], y=weekly_df['return_pct'], mode='markers', marker=dict(size=10, color=weekly_df['return_pct'], colorscale='RdYlGn_r', line=dict(color='#2c3e50', width=1))))
+                    fig.add_trace(go.Scatter(x=weekly_df['order_quantity'], y=weekly_df['return_pct'], mode='markers', marker=dict(size=6, color=weekly_df['return_pct'], colorscale='RdYlGn_r')))
                     if len(active_weeks) > 1:
                         z = np.polyfit(active_weeks['order_quantity'], active_weeks['return_pct'], 1)
                         p = np.poly1d(z)
                         x_trend = np.linspace(active_weeks['order_quantity'].min(), active_weeks['order_quantity'].max(), 100)
-                        fig.add_trace(go.Scatter(x=x_trend, y=p(x_trend), mode='lines', name='Trend', line=dict(color='#e74c3c', dash='dash', width=3)))
-                    fig.update_layout(title="Order Quantity vs Return Rate", xaxis_title="Order Qty (bales)", yaxis_title="Return Rate (%)", height=550, showlegend=False, font=dict(size=12), title_font_size=16)
+                        fig.add_trace(go.Scatter(x=x_trend, y=p(x_trend), mode='lines', name='Trend', line=dict(color='#e74c3c', dash='dash')))
+                    fig.update_layout(title="Order Quantity vs Return Rate", xaxis_title="Order Qty (bales)", yaxis_title="Return Rate (%)", height=400, showlegend=False)
                     st.plotly_chart(fig, use_container_width=True)
                     st.subheader("Optimal Pattern")
                     col1, col2 = st.columns(2)
@@ -380,15 +380,15 @@ elif page == "Order Recommendations":
                 col1, col2 = st.columns(2)
                 with col1:
                     fig = go.Figure()
-                    fig.add_trace(go.Bar(x=rec_df['Branch'], y=rec_df['Current Qty'], name='Current', marker_color='#95a5a6', marker_line=dict(color='#7f8c8d', width=1)))
-                    fig.add_trace(go.Bar(x=rec_df['Branch'], y=rec_df['Recommended Qty'], name='Recommended', marker_color='#3498db', marker_line=dict(color='#2980b9', width=1)))
-                    fig.update_layout(title="Current vs Recommended", barmode='group', height=550, xaxis_tickangle=-45, showlegend=True, font=dict(size=12), title_font_size=16)
+                    fig.add_trace(go.Bar(x=rec_df['Branch'], y=rec_df['Current Qty'], name='Current', marker_color='#95a5a6'))
+                    fig.add_trace(go.Bar(x=rec_df['Branch'], y=rec_df['Recommended Qty'], name='Recommended', marker_color='#3498db'))
+                    fig.update_layout(title="Current vs Recommended", barmode='group', height=400, xaxis_tickangle=-45, showlegend=True)
                     st.plotly_chart(fig, use_container_width=True)
                 with col2:
                     fig2 = go.Figure()
-                    fig2.add_trace(go.Bar(x=rec_df['Branch'], y=rec_df['Current Return %'], name='Current', marker_color='#e74c3c', marker_line=dict(color='#c0392b', width=1)))
-                    fig2.add_trace(go.Bar(x=rec_df['Branch'], y=rec_df['Expected Return %'], name='Expected', marker_color='#27ae60', marker_line=dict(color='#1e8449', width=1)))
-                    fig2.update_layout(title="Return Rate Comparison", barmode='group', height=550, xaxis_tickangle=-45, showlegend=True, font=dict(size=12), title_font_size=16)
+                    fig2.add_trace(go.Bar(x=rec_df['Branch'], y=rec_df['Current Return %'], name='Current', marker_color='#e74c3c'))
+                    fig2.add_trace(go.Bar(x=rec_df['Branch'], y=rec_df['Expected Return %'], name='Expected', marker_color='#27ae60'))
+                    fig2.update_layout(title="Return Rate Comparison", barmode='group', height=400, xaxis_tickangle=-45, showlegend=True)
                     st.plotly_chart(fig2, use_container_width=True)
                 st.subheader("Export")
                 export_df = rec_df[['Branch', 'Current Qty', 'Recommended Qty', 'Qty Change %', 'Current Return %', 'Expected Return %', 'Expected Improvement', 'Confidence', 'Status']].copy()
@@ -396,4 +396,4 @@ elif page == "Order Recommendations":
                 st.dataframe(export_df, use_container_width=True, hide_index=True)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Chapati Analytics v32.0 | Colorful & Spacious")
+st.sidebar.caption("Chapati Analytics v32.0")
