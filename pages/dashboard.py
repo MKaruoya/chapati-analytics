@@ -96,18 +96,32 @@ def show():
                 metrics_df = pd.DataFrame(branch_metrics)
                 active_df = metrics_df[metrics_df['Active Status'] == 'Active']
                 
-                # Key Metrics
+                # Key Metrics with Tooltips
                 st.subheader("Overview")
                 col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Total Active", len(active_df))
-                col2.metric("Avg Return Rate", f"{active_df['M7 Return Rate'].mean():.1f}%")
-                critical_count = len(metrics_df[metrics_df['Status'].isin(['CRITICAL', 'HIGH'])])
-                col3.metric("Critical Issues", critical_count)
-                improving_count = len(metrics_df[metrics_df['Overall Trend'] == 'Improving'])
-                col4.metric("Improving", improving_count)
+                
+                with col1:
+                    st.metric("Total Active", len(active_df))
+                    st.caption("Number of active branches")
+                
+                with col2:
+                    st.metric("Avg Return Rate", f"{active_df['M7 Return Rate'].mean():.1f}%")
+                    st.caption("Average returns across all active branches")
+                
+                with col3:
+                    critical_count = len(metrics_df[metrics_df['Status'].isin(['CRITICAL', 'HIGH'])])
+                    st.metric("Critical Issues", critical_count)
+                    st.caption("Branches needing immediate attention")
+                
+                with col4:
+                    improving_count = len(metrics_df[metrics_df['Overall Trend'] == 'Improving'])
+                    st.metric("Improving", improving_count)
+                    st.caption("Branches with declining return rates")
                 
                 # Main Visualization - Return Rate by Branch
                 st.subheader("Branch Performance")
+                st.caption("Color coding: Red = Critical/High | Orange = Moderate | Yellow = Watch | Green = Good")
+                
                 if len(active_df) > 0:
                     active_sorted = active_df.sort_values('M7 Return Rate', ascending=False)
                     colors = [get_status_color(status) for status in active_sorted['Status']]
@@ -122,7 +136,7 @@ def show():
                         hovertemplate='<b>%{x}</b><br>Return Rate: %{y:.1f}%<extra></extra>'
                     ))
                     fig.update_layout(
-                        title="Return Rate by Branch",
+                        title="Return Rate by Branch (Month 7)",
                         height=500,
                         xaxis_tickangle=-45,
                         showlegend=False,
@@ -136,6 +150,7 @@ def show():
                 
                 with col1:
                     st.subheader("Issues to Address")
+                    st.caption("Branches with Critical or High return rates")
                     critical_df = metrics_df[metrics_df['Status'].isin(['CRITICAL', 'HIGH'])].sort_values('Priority')
                     if len(critical_df) > 0:
                         for idx, row in critical_df.iterrows():
@@ -151,6 +166,7 @@ def show():
                 
                 with col2:
                     st.subheader("Improving Branches")
+                    st.caption("Branches with declining return rates (getting better)")
                     improving_df = metrics_df[metrics_df['Overall Trend'] == 'Improving'].sort_values('M7 Return Rate')
                     if len(improving_df) > 0:
                         for idx, row in improving_df.iterrows():
@@ -163,21 +179,45 @@ def show():
                     else:
                         st.info("No improving branches")
                 
-                # Trend Analysis
+                # Trend Analysis with Explanations
                 st.subheader("Trend Analysis")
+                st.caption("Compares return rates from early period (M1-M3) to recent period (M5-M7)")
+                
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
                     improving = len(metrics_df[metrics_df['Overall Trend'] == 'Improving'])
                     st.metric("Improving", improving, delta=f"+{improving}")
+                    st.caption("Return rate is decreasing (good)")
                 
                 with col2:
                     stable = len(metrics_df[metrics_df['Overall Trend'] == 'Stable'])
                     st.metric("Stable", stable)
+                    st.caption("Return rate is unchanged")
                 
                 with col3:
                     worsening = len(metrics_df[metrics_df['Overall Trend'] == 'Worsening'])
                     st.metric("Worsening", worsening, delta=f"-{worsening}")
+                    st.caption("Return rate is increasing (bad)")
+                
+                # Status Legend
+                st.subheader("Status Legend")
+                col1, col2, col3, col4, col5 = st.columns(5)
+                
+                with col1:
+                    st.markdown("<span style='color: #dc3545; font-weight: bold;'>CRITICAL</span> - Negative sales", unsafe_allow_html=True)
+                
+                with col2:
+                    st.markdown("<span style='color: #fd7e14; font-weight: bold;'>HIGH</span> - Return rate > 30%", unsafe_allow_html=True)
+                
+                with col3:
+                    st.markdown("<span style='color: #ffc107; font-weight: bold;'>MODERATE</span> - Return rate 20-30%", unsafe_allow_html=True)
+                
+                with col4:
+                    st.markdown("<span style='color: #ffc107; font-weight: bold;'>WATCH</span> - Return rate 15-20%", unsafe_allow_html=True)
+                
+                with col5:
+                    st.markdown("<span style='color: #28a745; font-weight: bold;'>GOOD</span> - Return rate < 15%", unsafe_allow_html=True)
                 
                 # Detailed Table (Optional - Collapsible)
                 with st.expander("View Detailed Data"):
