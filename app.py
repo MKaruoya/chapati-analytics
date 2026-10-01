@@ -19,6 +19,8 @@ page = st.sidebar.radio("Select Analysis", [
 if 'data' not in st.session_state:
     st.session_state.data = None
 
+MAJOR_OUTLETS = ['Majid', 'quickmart', 'Naivas', 'Magunas', 'cleanshelf', 'powerstar', 'chandarana']
+
 def calculate_volatility(monthly_data):
     """Calculate volatility score (std dev of return rates)"""
     return_rates = [m['return_rate'] for m in monthly_data if m['has_data']]
@@ -40,6 +42,11 @@ def get_sales_volume_category(total_sales):
     else:
         return "Very Low Volume"
 
+def is_major_outlet(branch_name):
+    """Check if branch belongs to a major outlet"""
+    branch_lower = branch_name.lower()
+    return any(outlet.lower() in branch_lower for outlet in MAJOR_OUTLETS)
+
 if page == "📤 Upload Data":
     st.header("Upload Chapati Order Data (CSV)")
     uploaded_file = st.file_uploader("Choose a CSV file", type=['csv'])
@@ -58,22 +65,28 @@ if page == "📤 Upload Data":
             col3.metric("Unique Branches", df['Branch'].nunique())
             col4.metric("Data Pairs (Weeks)", (len(df.columns) - 1) // 2)
             st.subheader("✅ Ready for Analysis!")
-            st.write("Go to **Dashboard** to see overall summary of all branches.")
+            st.write("Go to **Dashboard** to see overall summary of major outlets.")
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
 
 elif page == "📊 Dashboard":
-    st.header("Overall Branch Performance Dashboard")
+    st.header("Major Outlets Performance Dashboard")
+    st.info(f"📊 Comparing: {', '.join(MAJOR_OUTLETS)}")
+    
     if st.session_state.data is None:
         st.warning("⚠️ Please upload data first!")
     else:
         df = st.session_state.data.copy()
         all_names = df['Branch'].dropna().unique()
-        branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
+        
+        # Filter for major outlets only
+        branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper() and is_major_outlet(name)]
         
         if not branches:
-            st.warning("⚠️ No branches found in data")
+            st.warning("⚠️ No major outlet branches found in data")
         else:
+            st.subheader(f"Found {len(branches)} branches from major outlets")
+            
             numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
             branch_metrics = []
             
@@ -190,7 +203,7 @@ elif page == "📊 Dashboard":
             if branch_metrics:
                 metrics_df = pd.DataFrame(branch_metrics)
                 
-                st.subheader("📊 Overall Summary")
+                st.subheader("📊 Overall Summary - Major Outlets")
                 col1, col2, col3, col4, col5 = st.columns(5)
                 active_branches = len(metrics_df[metrics_df['Active Status'] == 'Active'])
                 delisted_branches = len(metrics_df[metrics_df['Active Status'] == 'Delisted'])
@@ -249,14 +262,14 @@ elif page == "📊 Dashboard":
                     active_only = metrics_df[metrics_df['Active Status'] == 'Active']
                     fig_returns = go.Figure()
                     fig_returns.add_trace(go.Bar(x=active_only['Branch'].str[:30], y=active_only['M7 Return Rate'], marker=dict(color=active_only['M7 Return Rate'], colorscale='RdYlGn_r', showscale=True)))
-                    fig_returns.update_layout(title="Month 7 Return Rate (Active Branches)", height=400, xaxis_tickangle=-45)
+                    fig_returns.update_layout(title="Month 7 Return Rate (Major Outlets)", height=400, xaxis_tickangle=-45)
                     st.plotly_chart(fig_returns, use_container_width=True)
                 
                 with col2:
                     volume_counts = metrics_df['Volume Category'].value_counts()
                     fig_volume = go.Figure()
                     fig_volume.add_trace(go.Bar(x=volume_counts.index, y=volume_counts.values, marker_color=['darkgreen', 'green', 'orange', 'red']))
-                    fig_volume.update_layout(title="Branches by Sales Volume", height=400)
+                    fig_volume.update_layout(title="Major Outlets by Sales Volume", height=400)
                     st.plotly_chart(fig_volume, use_container_width=True)
                 
                 with col3:
@@ -286,7 +299,7 @@ elif page == "📊 Dashboard":
                     fig_overall = go.Figure(data=[go.Pie(labels=['📉 Improving', '📈 Worsening', '➡️ Stable'], values=[improving_overall, worsening_overall, stable_overall], marker=dict(colors=['green', 'red', 'gray']))])
                     st.plotly_chart(fig_overall, use_container_width=True)
                 
-                st.subheader("🔍 Peer Comparison")
+                st.subheader("🔍 Peer Comparison - Major Outlets")
                 active_only = metrics_df[metrics_df['Active Status'] == 'Active'].copy()
                 col1, col2 = st.columns(2)
                 
@@ -459,6 +472,7 @@ elif page == "📈 Store Analysis":
                         weekly_df_plot['Returns'] = pd.to_numeric(weekly_df_plot['returns_numeric'])
                         fig_weekly = go.Figure()
                         fig_weekly.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Net Sales'], name='Net Sales', marker_color='green'))
+                        
                         fig_weekly.add_trace(go.Bar(x=weekly_df_plot['Week'], y=weekly_df_plot['Returns'], name='Returns', marker_color='red'))
                         fig_weekly.update_layout(title="Weekly Net Sales vs Returns", barmode='group', height=400)
                         st.plotly_chart(fig_weekly, use_container_width=True)
@@ -472,4 +486,4 @@ elif page == "💡 Optimal Order Recommendations":
     st.info("💡 Coming soon...")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v18.0\n\nAdded: Volatility, Volume Context, Peer Comparison!")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v19.0\n\nDashboard filtered for major outlets only!")
