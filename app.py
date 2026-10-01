@@ -39,10 +39,43 @@ def get_sales_volume_category(total_sales):
         return "Very Low Volume"
 
 def extract_outlet_name(branch_name):
-    """Extract outlet name from branch name (e.g., 'Majid-Nairobi' -> 'Majid')"""
+    """Extract outlet name from branch name"""
     if isinstance(branch_name, str) and '-' in branch_name:
         return branch_name.split('-')[0].strip()
     return None
+
+def calculate_quarter_trend(monthly_data):
+    """Calculate quarter trend (Last Quarter vs Previous Quarter)"""
+    active_months = [m for m in monthly_data if m['has_data']]
+    
+    if len(active_months) < 3:
+        return None, None, None
+    
+    # Last Quarter = Last 3 months with data
+    last_quarter = active_months[-3:]
+    last_quarter_avg = np.mean([m['return_rate'] for m in last_quarter])
+    
+    # Previous Quarter = 3 months before that
+    if len(active_months) >= 6:
+        prev_quarter = active_months[-6:-3]
+        prev_quarter_avg = np.mean([m['return_rate'] for m in prev_quarter])
+    else:
+        prev_quarter_avg = None
+    
+    # Calculate trend
+    if prev_quarter_avg is not None:
+        quarter_change = last_quarter_avg - prev_quarter_avg
+        if quarter_change < -2:
+            trend = "📉 Improving"
+        elif quarter_change > 2:
+            trend = "📈 Worsening"
+        else:
+            trend = "➡️ Stable"
+    else:
+        quarter_change = None
+        trend = "N/A"
+    
+    return last_quarter_avg, quarter_change, trend
 
 if page == "📤 Upload Data":
     st.header("Upload Chapati Order Data (CSV)")
@@ -75,10 +108,7 @@ elif page == "📊 Dashboard":
         df = st.session_state.data.copy()
         all_names = df['Branch'].dropna().unique()
         
-        # Filter valid branches (have '-' and not product names)
         valid_branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
-        
-        # Extract unique outlet names
         outlet_names = sorted(set([extract_outlet_name(b) for b in valid_branches if extract_outlet_name(b)]))
         
         if not outlet_names:
@@ -87,7 +117,6 @@ elif page == "📊 Dashboard":
             st.subheader("🏪 Select Outlet to Analyze")
             selected_outlet = st.selectbox("Choose an outlet:", outlet_names)
             
-            # Get all branches for this outlet
             outlet_branches = [b for b in valid_branches if extract_outlet_name(b) == selected_outlet]
             
             st.info(f"📍 Analyzing **{selected_outlet}** - Found {len(outlet_branches)} branches")
@@ -116,15 +145,8 @@ elif page == "📊 Dashboard":
                             m7_return_rate = None
                             m7_sales = None
                         
-                        month_6 = monthly_data[5]
-                        m6_return_rate = month_6['return_rate'] if month_6['has_data'] else None
-                        
-                        if is_active_m7 and m6_return_rate is not None:
-                            m6_m7_trend = "📉" if m7_return_rate < m6_return_rate else "📈" if m7_return_rate > m6_return_rate else "➡️"
-                            m6_m7_change = m7_return_rate - m6_return_rate
-                        else:
-                            m6_m7_trend = None
-                            m6_m7_change = None
+                        # Calculate Quarter Trend
+                        last_quarter_avg, quarter_change, quarter_trend = calculate_quarter_trend(monthly_data)
                         
                         first_period_start = active_periods[0][0]
                         last_period_end = active_periods[-1][-1]
@@ -168,7 +190,8 @@ elif page == "📊 Dashboard":
                             active_status = "Delisted"
                             m7_return_rate = last_return_rate
                         
-                        worsening = m6_m7_change is not None and m6_m7_change > 5
+                        # Worsening flag based on quarter trend
+                        worsening = quarter_change is not None and quarter_change > 2
                         high_volatility = volatility > 10
                         
                         branch_metrics.append({
@@ -177,8 +200,9 @@ elif page == "📊 Dashboard":
                             'Period': period_info,
                             'M7 Return Rate': m7_return_rate,
                             'M7 Sales': m7_sales if is_active_m7 else None,
-                            'M6→M7 Trend': m6_m7_trend,
-                            'M6→M7 Change': m6_m7_change,
+                            'Last Quarter Avg': last_quarter_avg,
+                            'Quarter Trend': quarter_trend,
+                            'Quarter Change': quarter_change,
                             'Overall Trend': overall_trend,
                             'Total Sales': total_sales,
                             'Total Returns': total_returns,
@@ -187,7 +211,8 @@ elif page == "📊 Dashboard":
                             'High Volatility': high_volatility,
                             'Status': status,
                             'Priority': priority,
-                            'Worsening': worsening
+                            'Worsening': worsening,
+                            'monthly_data': monthly_data
                         })
             
             if branch_metrics:
@@ -208,28 +233,32 @@ elif page == "📊 Dashboard":
                 st.subheader("🟢 Active Branches (Month 7)")
                 active_df = metrics_df[metrics_df['Active Status'] == 'Active'].sort_values('Priority')
                 if len(active_df) > 0:
-                    display_active = active_df[['Branch', 'M7 Return Rate', 'Volume Category', 'Volatility', 'M6→M7 Trend', 'Overall Trend', 'Status']].copy()
+                    display_active = active_df[['Branch', 'M7 Return Rate', 'Last Quarter Avg', 'Quarter Trend', 'Volume Category', 'Volatility', 'Overall Trend', 'Status']].copy()
                     display_active['M7 Return Rate'] = display_active['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
+                    display_active['Last Quarter Avg'] = display_active['Last Quarter Avg'].apply(lambda x: f"{x:.1f}%" if x else "N/A")
                     display_active['Volatility'] = display_active['Volatility'].apply(lambda x: f"{x:.1f}%")
                     st.dataframe(display_active, use_container_width=True)
+                    st.info("💡 **Last Quarter Avg:** Average return rate for last 3 months | **Quarter Trend:** Comparing last 3 months to previous 3 months")
                 else:
                     st.info("No active branches in Month 7")
                 
                 st.subheader("🔴 Critical Branches")
                 critical_df = metrics_df[metrics_df['Status'].str.contains('CRITICAL|HIGH')].sort_values('Priority')
                 if len(critical_df) > 0:
-                    display_critical = critical_df[['Branch', 'M7 Return Rate', 'Volume Category', 'M6→M7 Trend', 'Status']].copy()
+                    display_critical = critical_df[['Branch', 'M7 Return Rate', 'Last Quarter Avg', 'Quarter Trend', 'Volume Category', 'Status']].copy()
                     display_critical['M7 Return Rate'] = display_critical['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
+                    display_critical['Last Quarter Avg'] = display_critical['Last Quarter Avg'].apply(lambda x: f"{x:.1f}%" if x else "N/A")
                     st.dataframe(display_critical, use_container_width=True)
                 else:
                     st.success("✅ No critical branches")
                 
-                st.subheader("⚠️ Worsening Branches")
-                worsening_df = metrics_df[metrics_df['Worsening'] == True].sort_values('M6→M7 Change', ascending=False)
+                st.subheader("⚠️ Worsening Branches (Quarter Trend)")
+                worsening_df = metrics_df[metrics_df['Worsening'] == True].sort_values('Quarter Change', ascending=False)
                 if len(worsening_df) > 0:
-                    display_worsening = worsening_df[['Branch', 'M7 Return Rate', 'M6→M7 Change', 'Status']].copy()
+                    display_worsening = worsening_df[['Branch', 'M7 Return Rate', 'Last Quarter Avg', 'Quarter Change', 'Quarter Trend', 'Status']].copy()
                     display_worsening['M7 Return Rate'] = display_worsening['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
-                    display_worsening['M6→M7 Change'] = display_worsening['M6→M7 Change'].apply(lambda x: f"{x:+.1f}%")
+                    display_worsening['Last Quarter Avg'] = display_worsening['Last Quarter Avg'].apply(lambda x: f"{x:.1f}%" if x else "N/A")
+                    display_worsening['Quarter Change'] = display_worsening['Quarter Change'].apply(lambda x: f"{x:+.1f}%" if x else "N/A")
                     st.dataframe(display_worsening, use_container_width=True)
                 else:
                     st.success("✅ No worsening branches")
@@ -258,7 +287,7 @@ elif page == "📊 Dashboard":
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.write("**Best Performing Branches:**")
+                    st.write("**Best Performing Branches (Lowest M7 Return Rate):**")
                     if len(active_only) > 0:
                         top = active_only.nsmallest(3, 'M7 Return Rate')
                         for idx, row in top.iterrows():
@@ -267,7 +296,7 @@ elif page == "📊 Dashboard":
                         st.write("No active branches")
                 
                 with col2:
-                    st.write("**Worst Performing Branches:**")
+                    st.write("**Worst Performing Branches (Highest M7 Return Rate):**")
                     if len(active_only) > 0:
                         bottom = active_only.nlargest(3, 'M7 Return Rate')
                         for idx, row in bottom.iterrows():
@@ -359,4 +388,4 @@ elif page == "💡 Optimal Order Recommendations":
     st.info("💡 Coming soon...")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v21.0\n\nOutlet selector - compare all branches!")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v22.0\n\nQuarter trend analysis added!")
