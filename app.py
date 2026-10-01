@@ -2,6 +2,7 @@
 import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
+from scipy import stats
 from utils import calculate_monthly_metrics, get_active_periods
 
 st.set_page_config(page_title="Chapati Analytics", layout="wide")
@@ -45,7 +46,7 @@ def extract_outlet_name(branch_name):
     return None
 
 def calculate_quarter_trend(monthly_data):
-    """Calculate quarter trend (Last Quarter vs Previous Quarter)"""
+    """Calculate quarter trend"""
     active_months = [m for m in monthly_data if m['has_data']]
     
     if len(active_months) < 3:
@@ -406,12 +407,279 @@ elif page == "📈 Store Analysis":
                         st.plotly_chart(fig, use_container_width=True)
 
 elif page == "🤖 AI Relationship Analysis":
-    st.header("AI: Relationship Analysis")
-    st.info("📊 Coming soon...")
+    st.header("🤖 AI Relationship Analysis")
+    
+    if st.session_state.data is None:
+        st.warning("⚠️ Please upload data first!")
+    else:
+        df = st.session_state.data.copy()
+        all_names = df['Branch'].dropna().unique()
+        
+        valid_branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
+        outlet_names = sorted(set([extract_outlet_name(b) for b in valid_branches if extract_outlet_name(b)]))
+        
+        if not outlet_names:
+            st.error("❌ No outlets found in data!")
+        else:
+            st.subheader("🏪 Select Outlet to Analyze")
+            selected_outlet = st.selectbox("Choose an outlet:", outlet_names, key="ai_outlet")
+            
+            outlet_branches = [b for b in valid_branches if extract_outlet_name(b) == selected_outlet]
+            
+            st.info(f"📍 Analyzing **{selected_outlet}** - Found {len(outlet_branches)} branches")
+            
+            numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
+            branch_data = []
+            
+            for branch in outlet_branches:
+                branch_row = df[df['Branch'] == branch]
+                if len(branch_row) > 0:
+                    monthly_data = calculate_monthly_metrics(branch_row, numeric_cols)
+                    active_periods = get_active_periods(monthly_data)
+                    
+                    if active_periods:
+                        month_7 = monthly_data[6]
+                        is_active_m7 = month_7['has_data']
+                        
+                        if is_active_m7:
+                            m7_return_rate = month_7['return_rate']
+                            m7_sales = month_7['sales']
+                        else:
+                            m7_return_rate = None
+                            m7_sales = None
+                        
+                        total_sales = sum([m['sales'] for m in monthly_data])
+                        total_returns = sum([m['returns'] for m in monthly_data])
+                        volatility = calculate_volatility(monthly_data)
+                        
+                        if is_active_m7 and m7_return_rate is not None:
+                            branch_data.append({
+                                'Branch': branch,
+                                'Return Rate': m7_return_rate,
+                                'Sales Volume': abs(total_sales),
+                                'Total Returns': total_returns,
+                                'Volatility': volatility,
+                                'M7 Sales': m7_sales
+                            })
+            
+            if branch_data:
+                analysis_df = pd.DataFrame(branch_data)
+                
+                st.subheader("📊 Correlation Analysis")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.write("**Return Rate vs Sales Volume**")
+                    corr_sales = analysis_df['Return Rate'].corr(analysis_df['Sales Volume'])
+                    st.metric("Correlation", f"{corr_sales:.3f}")
+                    if corr_sales > 0.5:
+                        st.warning("🔴 Strong positive: Higher sales = Higher returns")
+                    elif corr_sales > 0.2:
+                        st.info("🟡 Moderate positive: Some relationship")
+                    elif corr_sales < -0.2:
+                        st.success("🟢 Negative: Higher sales = Lower returns (good!)")
+                    else:
+                        st.success("🟢 Weak: Independent relationship")
+                
+                with col2:
+                    st.write("**Return Rate vs Volatility**")
+                    corr_volatility = analysis_df['Return Rate'].corr(analysis_df['Volatility'])
+                    st.metric("Correlation", f"{corr_volatility:.3f}")
+                    if corr_volatility > 0.5:
+                        st.warning("🔴 Strong positive: Unstable = High returns")
+                    elif corr_volatility > 0.2:
+                        st.info("🟡 Moderate positive: Some instability")
+                    else:
+                        st.success("🟢 Weak: Stability independent of returns")
+                
+                with col3:
+                    st.write("**Sales Volume vs Volatility**")
+                    corr_vol_sales = analysis_df['Sales Volume'].corr(analysis_df['Volatility'])
+                    st.metric("Correlation", f"{corr_vol_sales:.3f}")
+                    if corr_vol_sales > 0.5:
+                        st.warning("🔴 High volume = Unstable")
+                    elif corr_vol_sales < -0.2:
+                        st.success("🟢 High volume = Stable")
+                    else:
+                        st.info("🟡 No clear relationship")
+                
+                st.subheader("📈 Relationship Visualizations")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=analysis_df['Sales Volume'],
+                        y=analysis_df['Return Rate'],
+                        mode='markers',
+                        marker=dict(size=10, color=analysis_df['Return Rate'], colorscale='RdYlGn_r'),
+                        text=analysis_df['Branch'],
+                        hovertemplate='<b>%{text}</b><br>Sales: %{x:.0f}<br>Return Rate: %{y:.1f}%<extra></extra>'
+                    ))
+                    z = np.polyfit(analysis_df['Sales Volume'], analysis_df['Return Rate'], 1)
+                    p = np.poly1d(z)
+                    fig.add_trace(go.Scatter(
+                        x=analysis_df['Sales Volume'].sort_values(),
+                        y=p(analysis_df['Sales Volume'].sort_values()),
+                        mode='lines',
+                        name='Trend',
+                        line=dict(color='red', dash='dash')
+                    ))
+                    fig.update_layout(title="Return Rate vs Sales Volume", xaxis_title="Sales Volume (bales)", yaxis_title="Return Rate (%)", height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=analysis_df['Volatility'],
+                        y=analysis_df['Return Rate'],
+                        mode='markers',
+                        marker=dict(size=10, color=analysis_df['Return Rate'], colorscale='RdYlGn_r'),
+                        text=analysis_df['Branch'],
+                        hovertemplate='<b>%{text}</b><br>Volatility: %{x:.1f}%<br>Return Rate: %{y:.1f}%<extra></extra>'
+                    ))
+                    z = np.polyfit(analysis_df['Volatility'], analysis_df['Return Rate'], 1)
+                    p = np.poly1d(z)
+                    fig.add_trace(go.Scatter(
+                        x=analysis_df['Volatility'].sort_values(),
+                        y=p(analysis_df['Volatility'].sort_values()),
+                        mode='lines',
+                        name='Trend',
+                        line=dict(color='red', dash='dash')
+                    ))
+                    fig.update_layout(title="Return Rate vs Volatility", xaxis_title="Volatility (%)", yaxis_title="Return Rate (%)", height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col3:
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=analysis_df['Sales Volume'],
+                        y=analysis_df['Volatility'],
+                        mode='markers',
+                        marker=dict(size=10, color=analysis_df['Return Rate'], colorscale='RdYlGn_r'),
+                        text=analysis_df['Branch'],
+                        hovertemplate='<b>%{text}</b><br>Sales: %{x:.0f}<br>Volatility: %{y:.1f}%<extra></extra>'
+                    ))
+                    z = np.polyfit(analysis_df['Sales Volume'], analysis_df['Volatility'], 1)
+                    p = np.poly1d(z)
+                    fig.add_trace(go.Scatter(
+                        x=analysis_df['Sales Volume'].sort_values(),
+                        y=p(analysis_df['Sales Volume'].sort_values()),
+                        mode='lines',
+                        name='Trend',
+                
+                        line=dict(color='red', dash='dash')
+                    ))
+                    fig.update_layout(title="Sales Volume vs Volatility", xaxis_title="Sales Volume (bales)", yaxis_title="Volatility (%)", height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                st.subheader("🔍 Pattern Recognition")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("**Volume Categories Analysis:**")
+                    analysis_df['Volume Cat'] = analysis_df['Sales Volume'].apply(get_sales_volume_category)
+                    volume_analysis = analysis_df.groupby('Volume Cat').agg({
+                        'Return Rate': ['mean', 'min', 'max'],
+                        'Volatility': 'mean',
+                        'Branch': 'count'
+                    }).round(2)
+                    
+                    for vol_cat in ['High Volume', 'Medium Volume', 'Low Volume', 'Very Low Volume']:
+                        if vol_cat in analysis_df['Volume Cat'].values:
+                            cat_data = analysis_df[analysis_df['Volume Cat'] == vol_cat]
+                            avg_return = cat_data['Return Rate'].mean()
+                            avg_volatility = cat_data['Volatility'].mean()
+                            count = len(cat_data)
+                            st.write(f"**{vol_cat}** ({count} branches)")
+                            st.write(f"  • Avg Return Rate: {avg_return:.1f}%")
+                            st.write(f"  • Avg Volatility: {avg_volatility:.1f}%")
+                
+                with col2:
+                    st.write("**Anomalies & Outliers:**")
+                    
+                    mean_return = analysis_df['Return Rate'].mean()
+                    std_return = analysis_df['Return Rate'].std()
+                    
+                    outliers = analysis_df[
+                        (analysis_df['Return Rate'] > mean_return + std_return) |
+                        (analysis_df['Return Rate'] < mean_return - std_return)
+                    ]
+                    
+                    if len(outliers) > 0:
+                        st.write(f"Found {len(outliers)} outlier branches:")
+                        for idx, row in outliers.iterrows():
+                            if row['Return Rate'] > mean_return + std_return:
+                                st.write(f"  🔴 {row['Branch']}: {row['Return Rate']:.1f}% (High)")
+                            else:
+                                st.write(f"  🟢 {row['Branch']}: {row['Return Rate']:.1f}% (Low)")
+                    else:
+                        st.write("✅ No significant outliers detected")
+                
+                st.subheader("💡 AI Insights & Recommendations")
+                
+                st.write("**Key Findings:**")
+                
+                findings = []
+                
+                if corr_sales > 0.5:
+                    findings.append("🔴 **High Sales = High Returns**: Larger orders lead to more returns. Possible quality or handling issues at scale.")
+                elif corr_sales < -0.2:
+                    findings.append("🟢 **High Sales = Low Returns**: Larger orders are handled better. These branches are efficient.")
+                else:
+                    findings.append("🟡 **Sales & Returns Independent**: Order size doesn't strongly affect return rate.")
+                
+                if corr_volatility > 0.5:
+                    findings.append("🔴 **Unstable = High Returns**: Inconsistent performance correlates with high returns. Need standardization.")
+                elif corr_volatility < -0.2:
+                    findings.append("🟢 **Stable = Good Performance**: Consistent branches have lower returns.")
+                else:
+                    findings.append("🟡 **Volatility Doesn't Predict Returns**: Consistency is independent of return rate.")
+                
+                if corr_vol_sales > 0.5:
+                    findings.append("⚠️ **High Volume = Unstable**: Larger branches are more volatile. May need better management.")
+                elif corr_vol_sales < -0.2:
+                    findings.append("✅ **High Volume = Stable**: Larger branches are more consistent.")
+                
+                for finding in findings:
+                    st.write(f"• {finding}")
+                
+                st.write("**Recommendations:**")
+                
+                recommendations = []
+                
+                if corr_sales > 0.3:
+                    recommendations.append("📉 Reduce order quantities for high-return branches")
+                    recommendations.append("🔍 Investigate quality/handling issues at scale")
+                
+                if corr_volatility > 0.3:
+                    recommendations.append("📋 Standardize processes for volatile branches")
+                    recommendations.append("📊 Implement consistency monitoring")
+                
+                best_branch = analysis_df.loc[analysis_df['Return Rate'].idxmin()]
+                recommendations.append(f"📚 Learn from {best_branch['Branch']} (Return Rate: {best_branch['Return Rate']:.1f}%)")
+                
+                worst_branch = analysis_df.loc[analysis_df['Return Rate'].idxmax()]
+                recommendations.append(f"🆘 Focus on {worst_branch['Branch']} (Return Rate: {worst_branch['Return Rate']:.1f}%)")
+                
+                for i, rec in enumerate(recommendations, 1):
+                    st.write(f"{i}. {rec}")
+                
+                st.subheader("📊 Statistical Summary")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                
+                col1.metric("Avg Return Rate", f"{analysis_df['Return Rate'].mean():.1f}%")
+                col2.metric("Avg Volatility", f"{analysis_df['Volatility'].mean():.1f}%")
+                col3.metric("Avg Sales Volume", f"{analysis_df['Sales Volume'].mean():.0f} bales")
+                col4.metric("Branches Analyzed", len(analysis_df))
 
 elif page == "💡 Optimal Order Recommendations":
     st.header("AI: Optimal Order Recommendations")
     st.info("💡 Coming soon...")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v23.0\n\nFixed visualization - full branch names!")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v24.0\n\nAI Relationship Analysis added!")
