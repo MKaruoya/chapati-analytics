@@ -2,7 +2,6 @@
 import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
-from scipy import stats
 from utils import calculate_monthly_metrics, get_active_periods
 
 st.set_page_config(page_title="Chapati Analytics", layout="wide")
@@ -238,7 +237,7 @@ elif page == "📊 Dashboard":
                 else:
                     st.info("No active branches in Month 7")
                 
-                st.subheader("🔴 Critical Branches")
+                st.subheading("🔴 Critical Branches")
                 critical_df = metrics_df[metrics_df['Status'].str.contains('CRITICAL|HIGH')].sort_values('Priority')
                 if len(critical_df) > 0:
                     display_critical = critical_df[['Branch', 'M7 Return Rate', 'Last Quarter Avg', 'Quarter Trend', 'Volume Category', 'Status']].copy()
@@ -569,7 +568,6 @@ elif page == "🤖 AI Relationship Analysis":
                         y=p(analysis_df['Sales Volume'].sort_values()),
                         mode='lines',
                         name='Trend',
-                
                         line=dict(color='red', dash='dash')
                     ))
                     fig.update_layout(title="Sales Volume vs Volatility", xaxis_title="Sales Volume (bales)", yaxis_title="Volatility (%)", height=400)
@@ -582,11 +580,6 @@ elif page == "🤖 AI Relationship Analysis":
                 with col1:
                     st.write("**Volume Categories Analysis:**")
                     analysis_df['Volume Cat'] = analysis_df['Sales Volume'].apply(get_sales_volume_category)
-                    volume_analysis = analysis_df.groupby('Volume Cat').agg({
-                        'Return Rate': ['mean', 'min', 'max'],
-                        'Volatility': 'mean',
-                        'Branch': 'count'
-                    }).round(2)
                     
                     for vol_cat in ['High Volume', 'Medium Volume', 'Low Volume', 'Very Low Volume']:
                         if vol_cat in analysis_df['Volume Cat'].values:
@@ -678,8 +671,8 @@ elif page == "🤖 AI Relationship Analysis":
                 col4.metric("Branches Analyzed", len(analysis_df))
 
 elif page == "💡 Optimal Order Recommendations":
-    st.header("AI: Optimal Order Recommendations")
+    st.header("💡 Optimal Order Recommendations")
     st.info("💡 Coming soon...")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v24.0\n\nAI Relationship Analysis added!")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v25.0\n\nClean redraft - no unused imports!")
