@@ -16,6 +16,38 @@ def get_status_color(status):
     }
     return colors.get(status, "#6c757d")
 
+def get_trend(overall_trend):
+    if "Improving" in overall_trend:
+        return "Improving"
+    elif "Worsening" in overall_trend:
+        return "Worsening"
+    else:
+        return "Stable"
+
+def get_action(status, trend):
+    if status == "CRITICAL":
+        return "Urgent - Negative sales, stop orders"
+    elif status == "HIGH":
+        if trend == "Worsening":
+            return "Urgent - Review order quantities"
+        else:
+            return "Monitor closely"
+    elif status == "MODERATE":
+        if trend == "Worsening":
+            return "Investigate - Returns increasing"
+        else:
+            return "Monitor"
+    elif status == "WATCH":
+        if trend == "Worsening":
+            return "Review order pattern"
+        else:
+            return "Monitor"
+    else:  # GOOD
+        if trend == "Improving":
+            return "Maintain current pattern"
+        else:
+            return "Monitor"
+
 def show():
     st.header("Dashboard")
     if st.session_state.data is None:
@@ -219,9 +251,17 @@ def show():
                 with col5:
                     st.markdown("<span style='color: #28a745; font-weight: bold;'>GOOD</span> - Return rate < 15%", unsafe_allow_html=True)
                 
-                # Detailed Table (Optional - Collapsible)
-                with st.expander("View Detailed Data"):
-                    display_df = active_df[['Branch', 'M7 Return Rate', 'Last Quarter Avg', 'Quarter Trend', 'Overall Trend', 'Status']].copy()
-                    display_df['M7 Return Rate'] = display_df['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
-                    display_df['Last Quarter Avg'] = display_df['Last Quarter Avg'].apply(lambda x: f"{x:.1f}%" if x else "N/A")
-                    st.dataframe(display_df, use_container_width=True, hide_index=True)
+                # Simplified Detailed Table
+                with st.expander("View All Branches - Detailed Data"):
+                    display_df = active_df.copy()
+                    display_df['Trend'] = display_df['Overall Trend'].apply(get_trend)
+                    display_df['Action'] = display_df.apply(lambda row: get_action(row['Status'], row['Trend']), axis=1)
+                    
+                    # Extract branch name (remove outlet prefix)
+                    display_df['Branch Name'] = display_df['Branch'].apply(lambda x: x.split('-')[-1].strip() if '-' in x else x)
+                    
+                    final_df = display_df[['Branch Name', 'M7 Return Rate', 'Trend', 'Status', 'Action']].copy()
+                    final_df['M7 Return Rate'] = final_df['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
+                    final_df = final_df.sort_values('Status', key=lambda x: x.map({'CRITICAL': 0, 'HIGH': 1, 'MODERATE': 2, 'WATCH': 3, 'GOOD': 4}))
+                    
+                    st.dataframe(final_df, use_container_width=True, hide_index=True)
