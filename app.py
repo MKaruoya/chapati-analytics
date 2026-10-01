@@ -7,12 +7,10 @@ from utils import calculate_monthly_metrics, get_active_periods
 st.set_page_config(page_title="Chapati Analytics", layout="wide")
 st.title("🍞 Chapati Data Analysis Agent")
 
-MAJOR_OUTLETS = ['Majid', 'quickmart', 'Naivas', 'Magunas', 'cleanshelf', 'powerstar', 'chandarana']
-
 st.sidebar.header("📊 Navigation")
 page = st.sidebar.radio("Select Analysis", [
     "📤 Upload Data",
-    "📊 Dashboard (Major Outlets Only)",
+    "📊 Dashboard",
     "📈 Store Analysis",
     "🤖 AI Relationship Analysis",
     "💡 Optimal Order Recommendations"
@@ -20,13 +18,6 @@ page = st.sidebar.radio("Select Analysis", [
 
 if 'data' not in st.session_state:
     st.session_state.data = None
-
-def is_major_outlet(branch_name):
-    """Check if branch belongs to a major outlet"""
-    if not isinstance(branch_name, str):
-        return False
-    branch_lower = branch_name.lower()
-    return any(outlet.lower() in branch_lower for outlet in MAJOR_OUTLETS)
 
 def calculate_volatility(monthly_data):
     """Calculate volatility score"""
@@ -47,6 +38,12 @@ def get_sales_volume_category(total_sales):
     else:
         return "Very Low Volume"
 
+def extract_outlet_name(branch_name):
+    """Extract outlet name from branch name (e.g., 'Majid-Nairobi' -> 'Majid')"""
+    if isinstance(branch_name, str) and '-' in branch_name:
+        return branch_name.split('-')[0].strip()
+    return None
+
 if page == "📤 Upload Data":
     st.header("Upload Chapati Order Data (CSV)")
     uploaded_file = st.file_uploader("Choose a CSV file", type=['csv'])
@@ -65,13 +62,12 @@ if page == "📤 Upload Data":
             col3.metric("Unique Branches", df['Branch'].nunique())
             col4.metric("Data Pairs (Weeks)", (len(df.columns) - 1) // 2)
             st.subheader("✅ Ready for Analysis!")
-            st.write(f"Go to **Dashboard (Major Outlets Only)** to compare: {', '.join(MAJOR_OUTLETS)}")
+            st.write("Go to **Dashboard** to select an outlet and compare all its branches.")
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
 
-elif page == "📊 Dashboard (Major Outlets Only)":
-    st.header(f"🏪 Major Outlets Performance Dashboard")
-    st.info(f"📊 Analyzing: {', '.join(MAJOR_OUTLETS)}")
+elif page == "📊 Dashboard":
+    st.header("📊 Outlet Performance Dashboard")
     
     if st.session_state.data is None:
         st.warning("⚠️ Please upload data first!")
@@ -79,21 +75,27 @@ elif page == "📊 Dashboard (Major Outlets Only)":
         df = st.session_state.data.copy()
         all_names = df['Branch'].dropna().unique()
         
-        branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper() and is_major_outlet(name)]
+        # Filter valid branches (have '-' and not product names)
+        valid_branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
         
-        st.write(f"Found {len(branches)} branches from major outlets")
+        # Extract unique outlet names
+        outlet_names = sorted(set([extract_outlet_name(b) for b in valid_branches if extract_outlet_name(b)]))
         
-        if len(branches) == 0:
-            st.error("❌ No branches found from major outlets!")
-            st.write("Available branches:")
-            for name in sorted(all_names):
-                if isinstance(name, str) and '-' in name:
-                    st.write(f"  • {name}")
+        if not outlet_names:
+            st.error("❌ No outlets found in data!")
         else:
+            st.subheader("🏪 Select Outlet to Analyze")
+            selected_outlet = st.selectbox("Choose an outlet:", outlet_names)
+            
+            # Get all branches for this outlet
+            outlet_branches = [b for b in valid_branches if extract_outlet_name(b) == selected_outlet]
+            
+            st.info(f"📍 Analyzing **{selected_outlet}** - Found {len(outlet_branches)} branches")
+            
             numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
             branch_metrics = []
             
-            for branch in branches:
+            for branch in outlet_branches:
                 branch_row = df[df['Branch'] == branch]
                 if len(branch_row) > 0:
                     monthly_data = calculate_monthly_metrics(branch_row, numeric_cols)
@@ -191,7 +193,7 @@ elif page == "📊 Dashboard (Major Outlets Only)":
             if branch_metrics:
                 metrics_df = pd.DataFrame(branch_metrics)
                 
-                st.subheader("📊 Summary - Major Outlets")
+                st.subheader(f"📊 Summary - {selected_outlet}")
                 col1, col2, col3, col4, col5 = st.columns(5)
                 active_branches = len(metrics_df[metrics_df['Active Status'] == 'Active'])
                 delisted_branches = len(metrics_df[metrics_df['Active Status'] == 'Delisted'])
@@ -210,6 +212,8 @@ elif page == "📊 Dashboard (Major Outlets Only)":
                     display_active['M7 Return Rate'] = display_active['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
                     display_active['Volatility'] = display_active['Volatility'].apply(lambda x: f"{x:.1f}%")
                     st.dataframe(display_active, use_container_width=True)
+                else:
+                    st.info("No active branches in Month 7")
                 
                 st.subheader("🔴 Critical Branches")
                 critical_df = metrics_df[metrics_df['Status'].str.contains('CRITICAL|HIGH')].sort_values('Priority')
@@ -217,39 +221,59 @@ elif page == "📊 Dashboard (Major Outlets Only)":
                     display_critical = critical_df[['Branch', 'M7 Return Rate', 'Volume Category', 'M6→M7 Trend', 'Status']].copy()
                     display_critical['M7 Return Rate'] = display_critical['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
                     st.dataframe(display_critical, use_container_width=True)
+                else:
+                    st.success("✅ No critical branches")
+                
+                st.subheader("⚠️ Worsening Branches")
+                worsening_df = metrics_df[metrics_df['Worsening'] == True].sort_values('M6→M7 Change', ascending=False)
+                if len(worsening_df) > 0:
+                    display_worsening = worsening_df[['Branch', 'M7 Return Rate', 'M6→M7 Change', 'Status']].copy()
+                    display_worsening['M7 Return Rate'] = display_worsening['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
+                    display_worsening['M6→M7 Change'] = display_worsening['M6→M7 Change'].apply(lambda x: f"{x:+.1f}%")
+                    st.dataframe(display_worsening, use_container_width=True)
+                else:
+                    st.success("✅ No worsening branches")
                 
                 st.subheader("📊 Visualizations")
                 col1, col2 = st.columns(2)
                 
                 with col1:
                     active_only = metrics_df[metrics_df['Active Status'] == 'Active']
-                    fig = go.Figure()
-                    fig.add_trace(go.Bar(x=active_only['Branch'], y=active_only['M7 Return Rate'], marker=dict(color=active_only['M7 Return Rate'], colorscale='RdYlGn_r')))
-                    fig.update_layout(title="Month 7 Return Rate - Major Outlets", height=400, xaxis_tickangle=-45)
-                    st.plotly_chart(fig, use_container_width=True)
+                    if len(active_only) > 0:
+                        fig = go.Figure()
+                        fig.add_trace(go.Bar(x=active_only['Branch'], y=active_only['M7 Return Rate'], marker=dict(color=active_only['M7 Return Rate'], colorscale='RdYlGn_r')))
+                        fig.update_layout(title=f"Month 7 Return Rate - {selected_outlet}", height=400, xaxis_tickangle=-45)
+                        st.plotly_chart(fig, use_container_width=True)
                 
                 with col2:
                     active_only = metrics_df[metrics_df['Active Status'] == 'Active']
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(x=active_only['M7 Return Rate'], y=active_only['Volatility'], mode='markers', marker=dict(size=12, color=active_only['M7 Return Rate'], colorscale='RdYlGn_r'), text=active_only['Branch'], hovertemplate='<b>%{text}</b><br>Return Rate: %{x:.1f}%<br>Volatility: %{y:.1f}%<extra></extra>'))
-                    fig.update_layout(title="Return Rate vs Volatility", xaxis_title="Return Rate (%)", yaxis_title="Volatility (%)", height=400)
-                    st.plotly_chart(fig, use_container_width=True)
+                    if len(active_only) > 0:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(x=active_only['M7 Return Rate'], y=active_only['Volatility'], mode='markers', marker=dict(size=12, color=active_only['M7 Return Rate'], colorscale='RdYlGn_r'), text=active_only['Branch'], hovertemplate='<b>%{text}</b><br>Return Rate: %{x:.1f}%<br>Volatility: %{y:.1f}%<extra></extra>'))
+                        fig.update_layout(title="Return Rate vs Volatility", xaxis_title="Return Rate (%)", yaxis_title="Volatility (%)", height=400)
+                        st.plotly_chart(fig, use_container_width=True)
                 
-                st.subheader("🔍 Peer Comparison")
+                st.subheader("🔍 Branch Comparison")
                 active_only = metrics_df[metrics_df['Active Status'] == 'Active'].copy()
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.write("**Best Performers:**")
-                    top = active_only.nsmallest(3, 'M7 Return Rate')
-                    for idx, row in top.iterrows():
-                        st.write(f"  🟢 {row['Branch']}: {row['M7 Return Rate']:.1f}%")
+                    st.write("**Best Performing Branches:**")
+                    if len(active_only) > 0:
+                        top = active_only.nsmallest(3, 'M7 Return Rate')
+                        for idx, row in top.iterrows():
+                            st.write(f"  🟢 {row['Branch']}: {row['M7 Return Rate']:.1f}% ({row['Volume Category']})")
+                    else:
+                        st.write("No active branches")
                 
                 with col2:
-                    st.write("**Worst Performers:**")
-                    bottom = active_only.nlargest(3, 'M7 Return Rate')
-                    for idx, row in bottom.iterrows():
-                        st.write(f"  🔴 {row['Branch']}: {row['M7 Return Rate']:.1f}%")
+                    st.write("**Worst Performing Branches:**")
+                    if len(active_only) > 0:
+                        bottom = active_only.nlargest(3, 'M7 Return Rate')
+                        for idx, row in bottom.iterrows():
+                            st.write(f"  🔴 {row['Branch']}: {row['M7 Return Rate']:.1f}% ({row['Volume Category']})")
+                    else:
+                        st.write("No active branches")
 
 elif page == "📈 Store Analysis":
     st.header("Store-Level Analysis")
@@ -335,4 +359,4 @@ elif page == "💡 Optimal Order Recommendations":
     st.info("💡 Coming soon...")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v20.0\n\nMajor Outlets Only!")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v21.0\n\nOutlet selector - compare all branches!")
