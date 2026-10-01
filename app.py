@@ -20,6 +20,26 @@ page = st.sidebar.radio("Select Analysis", [
 if 'data' not in st.session_state:
     st.session_state.data = None
 
+def calculate_volatility(monthly_data):
+    """Calculate volatility score (std dev of return rates)"""
+    return_rates = [m['return_rate'] for m in monthly_data if m['has_data']]
+    if len(return_rates) > 1:
+        volatility = np.std(return_rates)
+    else:
+        volatility = 0
+    return volatility
+
+def get_sales_volume_category(total_sales):
+    """Categorize branch by sales volume"""
+    if total_sales > 500:
+        return "High Volume"
+    elif total_sales > 200:
+        return "Medium Volume"
+    elif total_sales > 50:
+        return "Low Volume"
+    else:
+        return "Very Low Volume"
+
 if page == "📤 Upload Data":
     st.header("Upload Chapati Order Data (CSV)")
     uploaded_file = st.file_uploader("Choose a CSV file", type=['csv'])
@@ -92,6 +112,17 @@ elif page == "📊 Dashboard":
                         else:
                             period_info = f"M{current_period_start}-M{current_period_end}"
                             has_gaps = False
+                        
+                        # Calculate total sales and returns
+                        total_sales = sum([m['sales'] for m in monthly_data])
+                        total_returns = sum([m['returns'] for m in monthly_data])
+                        
+                        # Volatility score
+                        volatility = calculate_volatility(monthly_data)
+                        
+                        # Sales volume category
+                        volume_category = get_sales_volume_category(abs(total_sales))
+                        
                         if is_active_m7:
                             if m7_sales < 0:
                                 status = "🔴 CRITICAL"
@@ -122,9 +153,16 @@ elif page == "📊 Dashboard":
                                 priority = 6
                             active_status = "Delisted"
                             m7_return_rate = last_return_rate
+                        
                         worsening = m6_m7_change is not None and m6_m7_change > 5
                         if worsening and priority > 2:
                             priority -= 1
+                        
+                        # High volatility flag
+                        high_volatility = volatility > 10
+                        if high_volatility and priority > 3:
+                            priority -= 1
+                        
                         branch_metrics.append({
                             'Branch': branch,
                             'Active Status': active_status,
@@ -136,14 +174,21 @@ elif page == "📊 Dashboard":
                             'M6→M7 Change': m6_m7_change,
                             'Overall Trend': overall_trend,
                             'Overall Change': overall_change,
+                            'Total Sales': total_sales,
+                            'Total Returns': total_returns,
+                            'Volume Category': volume_category,
+                            'Volatility': volatility,
+                            'High Volatility': high_volatility,
                             'Status': status,
                             'Priority': priority,
                             'Worsening': worsening,
                             'monthly_data': monthly_data,
                             'active_periods': active_periods
                         })
+            
             if branch_metrics:
                 metrics_df = pd.DataFrame(branch_metrics)
+                
                 st.subheader("📊 Overall Summary")
                 col1, col2, col3, col4, col5 = st.columns(5)
                 active_branches = len(metrics_df[metrics_df['Active Status'] == 'Active'])
@@ -154,47 +199,77 @@ elif page == "📊 Dashboard":
                 col4.metric("Avg M7 Return Rate", f"{metrics_df[metrics_df['Active Status'] == 'Active']['M7 Return Rate'].mean():.1f}%")
                 critical_count = len(metrics_df[metrics_df['Status'].str.contains('CRITICAL|HIGH')])
                 col5.metric("Critical/High Issues", critical_count, delta=f"🔴" if critical_count > 0 else "✅")
+                
                 st.subheader("🟢 Active Branches (Month 7)")
                 active_df = metrics_df[metrics_df['Active Status'] == 'Active'].sort_values('Priority')
                 if len(active_df) > 0:
-                    display_active = active_df[['Branch', 'Period', 'M7 Return Rate', 'M6→M7 Trend', 'M6→M7 Change', 'Overall Trend', 'Status']].copy()
+                    display_active = active_df[['Branch', 'Period', 'M7 Return Rate', 'Volume Category', 'Volatility', 'M6→M7 Trend', 'Overall Trend', 'Status']].copy()
                     display_active['M7 Return Rate'] = display_active['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
-                    display_active['M6→M7 Change'] = display_active['M6→M7 Change'].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else "N/A")
-                    display_active['Overall Change'] = active_df['Overall Change'].apply(lambda x: f"{x:+.1f}%")
+                    display_active['Volatility'] = display_active['Volatility'].apply(lambda x: f"{x:.1f}%" if x > 0 else "N/A")
                     st.dataframe(display_active, use_container_width=True)
-                    st.info("💡 **M6→M7 Trend:** Latest month-on-month change | **Overall Trend:** First active month to last active month")
+                    st.info("💡 **Volume Category:** Sales magnitude | **Volatility:** Return rate consistency | **M6→M7:** Latest trend | **Overall:** First to last active month")
+                
                 critical_branches = metrics_df[metrics_df['Status'].str.contains('CRITICAL|HIGH')].sort_values('Priority')
                 if len(critical_branches) > 0:
                     st.subheader("🔴 Branches Needing Immediate Attention")
-                    display_critical = critical_branches[['Branch', 'Active Status', 'Period', 'M7 Return Rate', 'M6→M7 Trend', 'Overall Trend', 'Status']].copy()
+                    display_critical = critical_branches[['Branch', 'Active Status', 'Period', 'M7 Return Rate', 'Volume Category', 'Volatility', 'M6→M7 Trend', 'Status']].copy()
                     display_critical['M7 Return Rate'] = display_critical['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
+                    display_critical['Volatility'] = display_critical['Volatility'].apply(lambda x: f"{x:.1f}%" if x > 0 else "N/A")
                     st.dataframe(display_critical, use_container_width=True)
+                
                 worsening_branches = metrics_df[metrics_df['Worsening'] == True].sort_values('M6→M7 Change', ascending=False)
                 if len(worsening_branches) > 0:
                     st.subheader("⚠️ Branches with Worsening Return Rates (M6→M7)")
-                    display_worsening = worsening_branches[['Branch', 'Period', 'M7 Return Rate', 'M6→M7 Change', 'Status']].copy()
+                    display_worsening = worsening_branches[['Branch', 'Period', 'M7 Return Rate', 'Volume Category', 'M6→M7 Change', 'Status']].copy()
                     display_worsening['M7 Return Rate'] = display_worsening['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
                     display_worsening['M6→M7 Change'] = display_worsening['M6→M7 Change'].apply(lambda x: f"{x:+.1f}%")
                     st.dataframe(display_worsening, use_container_width=True)
+                
+                volatile_branches = metrics_df[metrics_df['High Volatility'] == True].sort_values('Volatility', ascending=False)
+                if len(volatile_branches) > 0:
+                    st.subheader("📊 Branches with High Volatility (Unstable Performance)")
+                    display_volatile = volatile_branches[['Branch', 'Period', 'M7 Return Rate', 'Volatility', 'Volume Category', 'Status']].copy()
+                    display_volatile['M7 Return Rate'] = display_volatile['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
+                    display_volatile['Volatility'] = display_volatile['Volatility'].apply(lambda x: f"{x:.1f}%")
+                    st.dataframe(display_volatile, use_container_width=True)
+                    st.info("💡 **High Volatility:** Return rate varies significantly month-to-month. Indicates inconsistent performance or handling issues.")
+                
                 delisted_df = metrics_df[metrics_df['Active Status'] == 'Delisted'].sort_values('Priority')
                 if len(delisted_df) > 0:
                     st.subheader("⚪ Delisted Branches")
-                    display_delisted = delisted_df[['Branch', 'Period', 'M7 Return Rate', 'Overall Trend', 'Status']].copy()
-                    display_delisted['M7 Return Rate'] = display_delisted['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
+                    display_delisted = delisted_df[['Branch', 'Period', 'Total Sales', 'Volume Category', 'Overall Trend', 'Status']].copy()
+                    display_delisted['Total Sales'] = display_delisted['Total Sales'].apply(lambda x: f"{x:.0f} bales")
                     st.dataframe(display_delisted, use_container_width=True)
+                
                 st.subheader("📊 Visualizations")
-                col1, col2 = st.columns(2)
+                
+                col1, col2, col3 = st.columns(3)
+                
                 with col1:
                     active_only = metrics_df[metrics_df['Active Status'] == 'Active']
                     fig_returns = go.Figure()
                     fig_returns.add_trace(go.Bar(x=active_only['Branch'].str[:30], y=active_only['M7 Return Rate'], marker=dict(color=active_only['M7 Return Rate'], colorscale='RdYlGn_r', showscale=True)))
                     fig_returns.update_layout(title="Month 7 Return Rate (Active Branches)", height=400, xaxis_tickangle=-45)
                     st.plotly_chart(fig_returns, use_container_width=True)
+                
                 with col2:
-                    fig_status = go.Figure(data=[go.Pie(labels=['🟢 Active', '⚪ Delisted'], values=[active_branches, delisted_branches], marker=dict(colors=['green', 'gray']))])
-                    st.plotly_chart(fig_status, use_container_width=True)
+                    fig_volume = go.Figure()
+                    volume_counts = metrics_df['Volume Category'].value_counts()
+                    fig_volume.add_trace(go.Bar(x=volume_counts.index, y=volume_counts.values, marker_color=['darkgreen', 'green', 'orange', 'red']))
+                    fig_volume.update_layout(title="Branches by Sales Volume", height=400)
+                    st.plotly_chart(fig_volume, use_container_width=True)
+                
+                with col3:
+                    active_only = metrics_df[metrics_df['Active Status'] == 'Active']
+                    fig_volatility = go.Figure()
+                    fig_volatility.add_trace(go.Scatter(x=active_only['M7 Return Rate'], y=active_only['Volatility'], mode='markers', marker=dict(size=10, color=active_only['M7 Return Rate'], colorscale='RdYlGn_r', showscale=True), text=active_only['Branch'], hovertemplate='<b>%{text}</b><br>Return Rate: %{x:.1f}%<br>Volatility: %{y:.1f}%<extra></extra>'))
+                    fig_volatility.update_layout(title="Return Rate vs Volatility", xaxis_title="Return Rate (%)", yaxis_title="Volatility (%)", height=400)
+                    st.plotly_chart(fig_volatility, use_container_width=True)
+                
                 st.subheader("📈 Trend Analysis")
+                
                 col1, col2 = st.columns(2)
+                
                 with col1:
                     st.write("**M6→M7 Trends (Active Branches):**")
                     active_only = metrics_df[metrics_df['Active Status'] == 'Active']
@@ -203,6 +278,7 @@ elif page == "📊 Dashboard":
                     stable = len(active_only[active_only['M6→M7 Trend'] == '➡️'])
                     fig_m6m7 = go.Figure(data=[go.Pie(labels=['📉 Improving', '📈 Worsening', '➡️ Stable'], values=[improving, worsening, stable], marker=dict(colors=['green', 'red', 'gray']))])
                     st.plotly_chart(fig_m6m7, use_container_width=True)
+                
                 with col2:
                     st.write("**Overall Trends (All Branches):**")
                     improving_overall = len(metrics_df[metrics_df['Overall Trend'] == '📉'])
@@ -210,6 +286,29 @@ elif page == "📊 Dashboard":
                     stable_overall = len(metrics_df[metrics_df['Overall Trend'] == '➡️'])
                     fig_overall = go.Figure(data=[go.Pie(labels=['📉 Improving', '📈 Worsening', '➡️ Stable'], values=[improving_overall, worsening_overall, stable_overall], marker=dict(colors=['green', 'red', 'gray']))])
                     st.plotly_chart(fig_overall, use_container_width=True)
+                
+                st.subheader("🔍 Peer Comparison")
+                
+                active_only = metrics_df[metrics_df['Active Status'] == 'Active'].copy()
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("**Top Performers (Lowest Return Rate):**")
+                    top_performers = active_only.nsmallest(5, 'M7 Return Rate')[['Branch', 'M7 Return Rate', 'Volume Category']]
+                    for idx, row in top_performers.iterrows():
+                        st.write(f"  🟢 {row['Branch']}: {row['M7 Return Rate']:.1f}% ({row['Volume Category']})")
+                
+                with col2:
+                    st.write("**Bottom Performers (Highest Return Rate):**")
+                    bottom_performers = active_only.nlargest(5, 'M7 Return Rate')[['Branch', 'M7 Return Rate', 'Volume Category']]
+                    for idx, row in bottom_performers.iterrows():
+                        st.write(f"  🔴 {row['Branch']}: {row['M7 Return Rate']:.1f}% ({row['Volume Category']})")
+                
+                st.write("**Average Return Rate by Volume Category:**")
+                avg_by_volume = active_only.groupby('Volume Category')['M7 Return Rate'].mean().sort_values()
+                for volume, avg_rate in avg_by_volume.items():
+                    st.write(f"  • {volume}: {avg_rate:.1f}%")
 
 elif page == "📈 Store Analysis":
     st.header("Store-Level Analysis - Week by Week & Month by Month")
@@ -368,7 +467,7 @@ elif page == "📈 Store Analysis":
                         st.plotly_chart(fig_weekly, use_container_width=True)
 
 elif page == "🤖 AI Relationship Analysis":
-    st.header("AI: Relationship Analysis")
+        st.header("AI: Relationship Analysis")
     st.info("📊 Coming soon...")
 
 elif page == "💡 Optimal Order Recommendations":
@@ -376,4 +475,4 @@ elif page == "💡 Optimal Order Recommendations":
     st.info("💡 Coming soon...")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v17.2\n\nFixed syntax error!")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v18.0\n\nAdded: Volatility, Volume Context, Peer Comparison!")
