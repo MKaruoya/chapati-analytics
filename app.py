@@ -44,6 +44,36 @@ def extract_outlet_name(branch_name):
         return branch_name.split('-')[0].strip()
     return None
 
+def calculate_quarter_trend(monthly_data):
+    """Calculate quarter trend"""
+    active_months = [m for m in monthly_data if m['has_data']]
+    
+    if len(active_months) < 3:
+        return None, None, None
+    
+    last_quarter = active_months[-3:]
+    last_quarter_avg = np.mean([m['return_rate'] for m in last_quarter])
+    
+    if len(active_months) >= 6:
+        prev_quarter = active_months[-6:-3]
+        prev_quarter_avg = np.mean([m['return_rate'] for m in prev_quarter])
+    else:
+        prev_quarter_avg = None
+    
+    if prev_quarter_avg is not None:
+        quarter_change = last_quarter_avg - prev_quarter_avg
+        if quarter_change < -2:
+            trend = "📉 Improving"
+        elif quarter_change > 2:
+            trend = "📈 Worsening"
+        else:
+            trend = "➡️ Stable"
+    else:
+        quarter_change = None
+        trend = "N/A"
+    
+    return last_quarter_avg, quarter_change, trend
+
 def calculate_weekly_metrics(branch_row, numeric_cols):
     """Calculate weekly order quantities and returns"""
     weekly_data = []
@@ -104,9 +134,7 @@ def find_optimal_quantity(weekly_data):
     
     corr = np.corrcoef(quantities, returns)[0, 1]
     
-    # Calculate confidence based on data consistency
-    current_avg_return = np.mean(returns)
-    confidence = min(len(active_weeks) / 35, 1.0)  # 35 weeks is full period
+    confidence = min(len(active_weeks) / 35, 1.0)
     
     return optimal_qty, optimal_return_rate, corr, best_quartile[0], confidence
 
@@ -128,30 +156,406 @@ if page == "📤 Upload Data":
             col3.metric("Unique Branches", df['Branch'].nunique())
             col4.metric("Data Pairs (Weeks)", (len(df.columns) - 1) // 2)
             st.subheader("✅ Ready for Analysis!")
-            st.write("Go to **Optimal Order Recommendations** to get personalized suggestions for each store.")
+            st.write("Navigate to other tabs to analyze the data.")
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
 
 elif page == "📊 Dashboard":
     st.header("📊 Outlet Performance Dashboard")
+    
     if st.session_state.data is None:
         st.warning("⚠️ Please upload data first!")
     else:
-        st.info("Dashboard tab - navigate to other tabs for analysis")
+        df = st.session_state.data.copy()
+        all_names = df['Branch'].dropna().unique()
+        
+        valid_branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
+        outlet_names = sorted(set([extract_outlet_name(b) for b in valid_branches if extract_outlet_name(b)]))
+        
+        if not outlet_names:
+            st.error("❌ No outlets found in data!")
+        else:
+            st.subheader("🏪 Select Outlet to Analyze")
+            selected_outlet = st.selectbox("Choose an outlet:", outlet_names, key="dash_outlet")
+            
+            outlet_branches = [b for b in valid_branches if extract_outlet_name(b) == selected_outlet]
+            
+            st.info(f"📍 Analyzing **{selected_outlet}** - Found {len(outlet_branches)} branches")
+            
+            numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
+            branch_metrics = []
+            
+            for branch in outlet_branches:
+                branch_row = df[df['Branch'] == branch]
+                if len(branch_row) > 0:
+                    monthly_data = calculate_monthly_metrics(branch_row, numeric_cols)
+                    active_periods = get_active_periods(monthly_data)
+                    
+                    if active_periods:
+                        current_period = active_periods[-1]
+                        current_period_start = current_period[0]['month_num']
+                        current_period_end = current_period[-1]['month_num']
+                        
+                        month_7 = monthly_data[6]
+                        is_active_m7 = month_7['has_data']
+                        
+                        if is_active_m7:
+                            m7_return_rate = month_7['return_rate']
+                            m7_sales = month_7['sales']
+                        else:
+                            m7_return_rate = None
+                            m7_sales = None
+                        
+                        last_quarter_avg, quarter_change, quarter_trend = calculate_quarter_trend(monthly_data)
+                        
+                        first_period_start = active_periods[0][0]
+                        last_period_end = active_periods[-1][-1]
+                        
+                        overall_trend = "📉" if last_period_end['return_rate'] < first_period_start['return_rate'] else "📈" if last_period_end['return_rate'] > first_period_start['return_rate'] else "➡️"
+                        
+                        period_info = f"M{current_period_start}-M{current_period_end}"
+                        
+                        total_sales = sum([m['sales'] for m in monthly_data])
+                        total_returns = sum([m['returns'] for m in monthly_data])
+                        
+                        volatility = calculate_volatility(monthly_data)
+                        volume_category = get_sales_volume_category(abs(total_sales))
+                        
+                        if is_active_m7:
+                            if m7_sales < 0:
+                                status = "🔴 CRITICAL"
+                                priority = 1
+                            elif m7_return_rate > 30:
+                                status = "🔴 HIGH"
+                                priority = 2
+                            elif m7_return_rate > 20:
+                                status = "🟡 MODERATE"
+                                priority = 3
+                            elif m7_return_rate > 15:
+                                status = "🟡 WATCH"
+                                priority = 4
+                            else:
+                                status = "🟢 GOOD"
+                                priority = 5
+                            active_status = "Active"
+                        else:
+                            last_return_rate = last_period_end['return_rate']
+                            if last_return_rate > 30:
+                                status = "🔴 DELISTED"
+                                priority = 2
+                            else:
+                                status = "⚪ DELISTED"
+                                priority = 6
+                            active_status = "Delisted"
+                            m7_return_rate = last_return_rate
+                        
+                        worsening = quarter_change is not None and quarter_change > 2
+                        high_volatility = volatility > 10
+                        
+                        branch_metrics.append({
+                            'Branch': branch,
+                            'Active Status': active_status,
+                            'Period': period_info,
+                            'M7 Return Rate': m7_return_rate,
+                            'M7 Sales': m7_sales if is_active_m7 else None,
+                            'Last Quarter Avg': last_quarter_avg,
+                            'Quarter Trend': quarter_trend,
+                            'Quarter Change': quarter_change,
+                            'Overall Trend': overall_trend,
+                            'Total Sales': total_sales,
+                            'Total Returns': total_returns,
+                            'Volume Category': volume_category,
+                            'Volatility': volatility,
+                            'High Volatility': high_volatility,
+                            'Status': status,
+                            'Priority': priority,
+                            'Worsening': worsening,
+                            'monthly_data': monthly_data
+                        })
+            
+            if branch_metrics:
+                metrics_df = pd.DataFrame(branch_metrics)
+                
+                st.subheader(f"📊 Summary - {selected_outlet}")
+                col1, col2, col3, col4, col5 = st.columns(5)
+                active_branches = len(metrics_df[metrics_df['Active Status'] == 'Active'])
+                delisted_branches = len(metrics_df[metrics_df['Active Status'] == 'Delisted'])
+                col1.metric("Total Branches", len(metrics_df))
+                col2.metric("Active (M7)", active_branches)
+                col3.metric("Delisted", delisted_branches)
+                avg_rate = metrics_df[metrics_df['Active Status'] == 'Active']['M7 Return Rate'].mean()
+                col4.metric("Avg M7 Return Rate", f"{avg_rate:.1f}%")
+                critical_count = len(metrics_df[metrics_df['Status'].str.contains('CRITICAL|HIGH')])
+                col5.metric("Critical/High", critical_count)
+                
+                st.subheader("🟢 Active Branches (Month 7)")
+                active_df = metrics_df[metrics_df['Active Status'] == 'Active'].sort_values('Priority')
+                if len(active_df) > 0:
+                    display_active = active_df[['Branch', 'M7 Return Rate', 'Last Quarter Avg', 'Quarter Trend', 'Volume Category', 'Volatility', 'Overall Trend', 'Status']].copy()
+                    display_active['M7 Return Rate'] = display_active['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
+                    display_active['Last Quarter Avg'] = display_active['Last Quarter Avg'].apply(lambda x: f"{x:.1f}%" if x else "N/A")
+                    display_active['Volatility'] = display_active['Volatility'].apply(lambda x: f"{x:.1f}%")
+                    st.dataframe(display_active, use_container_width=True)
+                else:
+                    st.info("No active branches in Month 7")
+                
+                st.subheader("🔴 Critical Branches")
+                critical_df = metrics_df[metrics_df['Status'].str.contains('CRITICAL|HIGH')].sort_values('Priority')
+                if len(critical_df) > 0:
+                    display_critical = critical_df[['Branch', 'M7 Return Rate', 'Last Quarter Avg', 'Quarter Trend', 'Volume Category', 'Status']].copy()
+                    display_critical['M7 Return Rate'] = display_critical['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
+                    display_critical['Last Quarter Avg'] = display_critical['Last Quarter Avg'].apply(lambda x: f"{x:.1f}%" if x else "N/A")
+                    st.dataframe(display_critical, use_container_width=True)
+                else:
+                    st.success("✅ No critical branches")
+                
+                st.subheader("📊 Visualizations")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    active_only = metrics_df[metrics_df['Active Status'] == 'Active']
+                    if len(active_only) > 0:
+                        fig = go.Figure()
+                        fig.add_trace(go.Bar(
+                            x=active_only['Branch'],
+                            y=active_only['M7 Return Rate'],
+                            marker=dict(color=active_only['M7 Return Rate'], colorscale='RdYlGn_r'),
+                            text=active_only['M7 Return Rate'].apply(lambda x: f"{x:.1f}%"),
+                            textposition='auto',
+                            hovertemplate='<b>%{x}</b><br>Return Rate: %{y:.1f}%<extra></extra>'
+                        ))
+                        fig.update_layout(
+                            title=f"Month 7 Return Rate - {selected_outlet}",
+                            height=500,
+                            xaxis_tickangle=-45,
+                            xaxis=dict(automargin=True),
+                            yaxis_title="Return Rate (%)"
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    active_only = metrics_df[metrics_df['Active Status'] == 'Active']
+                    if len(active_only) > 0:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=active_only['M7 Return Rate'],
+                            y=active_only['Volatility'],
+                            mode='markers',
+                            marker=dict(
+                                size=12,
+                                color=active_only['M7 Return Rate'],
+                                colorscale='RdYlGn_r',
+                                showscale=True,
+                                colorbar=dict(title="Return Rate (%)")
+                            ),
+                            text=active_only['Branch'],
+                            hovertemplate='<b>%{text}</b><br>Return Rate: %{x:.1f}%<br>Volatility: %{y:.1f}%<extra></extra>'
+                        ))
+                        fig.update_layout(
+                            title="Return Rate vs Volatility",
+                            xaxis_title="Return Rate (%)",
+                            yaxis_title="Volatility (%)",
+                            height=500
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
 
 elif page == "📈 Store Analysis":
-    st.header("Store-Level Analysis")
+    st.header("Store-Level Analysis - Week by Week & Month by Month")
     if st.session_state.data is None:
         st.warning("⚠️ Please upload data first!")
     else:
-        st.info("Store Analysis tab - navigate to other tabs for analysis")
+        df = st.session_state.data.copy()
+        all_names = df['Branch'].dropna().unique()
+        branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
+        if branches:
+            selected_branch = st.selectbox("Select Branch", sorted(branches), key="store_branch")
+            branch_row = df[df['Branch'] == selected_branch]
+            if len(branch_row) > 0:
+                st.subheader(f"Analysis for {selected_branch}")
+                numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
+                weekly_data = []
+                week_num = 1
+                for i in range(0, len(numeric_cols) - 1, 2):
+                    net_sales_val = pd.to_numeric(branch_row[numeric_cols[i]].values[0], errors='coerce')
+                    returns_val = pd.to_numeric(branch_row[numeric_cols[i + 1]].values[0], errors='coerce')
+                    if pd.notna(net_sales_val) or pd.notna(returns_val):
+                        net_sales_val = net_sales_val if pd.notna(net_sales_val) else 0
+                        returns_val = returns_val if pd.notna(returns_val) else 0
+                        original_order = abs(net_sales_val) + returns_val
+                        return_pct = (returns_val / original_order * 100) if original_order > 0 else 0
+                        weekly_data.append({
+                            'Week': f"W{week_num}",
+                            'Net Sales': f"{net_sales_val:.0f}",
+                            'Returns': f"{returns_val:.0f}",
+                            'Return %': f"{return_pct:.1f}%",
+                            'net_sales_numeric': net_sales_val,
+                            'returns_numeric': returns_val,
+                            'return_pct_numeric': return_pct
+                        })
+                    week_num += 1
+                if weekly_data:
+                    st.subheader("📅 Weekly Performance")
+                    weekly_df = pd.DataFrame(weekly_data)
+                    st.dataframe(weekly_df[['Week', 'Net Sales', 'Returns', 'Return %']], use_container_width=True)
+                    
+                    st.subheader("📊 Monthly Performance")
+                    weeks_per_month = 5
+                    monthly_data = []
+                    for month_num in range(1, 10):
+                        start_week = (month_num - 1) * weeks_per_month
+                        end_week = month_num * weeks_per_month
+                        month_weeks = weekly_data[start_week:end_week]
+                        if month_weeks:
+                            month_sales = sum([w['net_sales_numeric'] for w in month_weeks])
+                            month_returns = sum([w['returns_numeric'] for w in month_weeks])
+                            month_original = abs(month_sales) + month_returns
+                            month_return_pct = (month_returns / month_original * 100) if month_original > 0 else 0
+                            monthly_data.append({
+                                'Month': f"M{month_num}",
+                                'Net Sales': f"{month_sales:.0f}",
+                                'Returns': f"{month_returns:.0f}",
+                                'Return %': f"{month_return_pct:.1f}%",
+                                'net_sales_numeric': month_sales,
+                                'returns_numeric': month_returns,
+                                'return_pct_numeric': month_return_pct
+                            })
+                    if monthly_data:
+                        monthly_df = pd.DataFrame(monthly_data)
+                        st.dataframe(monthly_df[['Month', 'Net Sales', 'Returns', 'Return %']], use_container_width=True)
+                        
+                        st.subheader("📈 Visualizations")
+                        monthly_df_plot = monthly_df.copy()
+                        monthly_df_plot['Net Sales'] = pd.to_numeric(monthly_df_plot['net_sales_numeric'])
+                        monthly_df_plot['Returns'] = pd.to_numeric(monthly_df_plot['returns_numeric'])
+                        
+                        fig = go.Figure()
+                        fig.add_trace(go.Bar(x=monthly_df_plot['Month'], y=monthly_df_plot['Net Sales'], name='Net Sales', marker_color='green'))
+                        fig.add_trace(go.Bar(x=monthly_df_plot['Month'], y=monthly_df_plot['Returns'], name='Returns', marker_color='red'))
+                        fig.update_layout(title="Monthly Net Sales vs Returns", barmode='group', height=400)
+                        st.plotly_chart(fig, use_container_width=True)
 
 elif page == "🤖 AI Relationship Analysis":
-    st.header("🤖 AI Relationship Analysis")
+    st.header("🤖 AI Relationship Analysis: Individual Branch Weekly Analysis")
+    
     if st.session_state.data is None:
         st.warning("⚠️ Please upload data first!")
     else:
-        st.info("AI Relationship Analysis tab - navigate to other tabs for analysis")
+        df = st.session_state.data.copy()
+        all_names = df['Branch'].dropna().unique()
+        
+        valid_branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
+        
+        if not valid_branches:
+            st.error("❌ No branches found in data!")
+        else:
+            st.subheader("🏪 Select Branch to Analyze")
+            selected_branch = st.selectbox("Choose a branch:", sorted(valid_branches), key="ai_branch")
+            
+            branch_row = df[df['Branch'] == selected_branch]
+            
+            if len(branch_row) > 0:
+                numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
+                weekly_data = calculate_weekly_metrics(branch_row, numeric_cols)
+                
+                if weekly_data:
+                    weekly_df = pd.DataFrame(weekly_data)
+                    
+                    st.info(f"📍 Analyzing **{selected_branch}** - {len(weekly_data)} weeks of data")
+                    
+                    active_weeks = weekly_df[weekly_df['order_quantity'] > 0]
+                    optimal_qty, optimal_return_rate, corr, best_quartile, confidence = find_optimal_quantity(weekly_data)
+                    
+                    st.subheader("📊 Weekly Correlation Analysis")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.write("**Correlation:**")
+                        st.metric("Order Qty vs Return Rate", f"{corr:.3f}")
+                        
+                        if corr > 0.3:
+                            st.error("🔴 Positive: Larger orders = Higher returns")
+                        elif corr < -0.3:
+                            st.success("🟢 Negative: Larger orders = Lower returns")
+                        else:
+                            st.info("🟡 Weak: Independent relationship")
+                    
+                    with col2:
+                        st.write("**Weekly Statistics:**")
+                        st.write(f"Total weeks: {len(weekly_df)}")
+                        st.write(f"Active weeks: {len(active_weeks)}")
+                        st.write(f"Avg order: {active_weeks['order_quantity'].mean():.0f} bales")
+                        st.write(f"Avg return rate: {active_weeks['return_pct'].mean():.1f}%")
+                    
+                    with col3:
+                        st.write("**Order Range:**")
+                        st.write(f"Min: {active_weeks['order_quantity'].min():.0f} bales")
+                        st.write(f"Max: {active_weeks['order_quantity'].max():.0f} bales")
+                        st.write(f"Median: {active_weeks['order_quantity'].median():.0f} bales")
+                    
+                    st.subheader("📈 Weekly Order Quantity vs Return Rate")
+                    
+                    fig = go.Figure()
+                    
+                    fig.add_trace(go.Scatter(
+                        x=weekly_df['order_quantity'],
+                        y=weekly_df['return_pct'],
+                        mode='markers',
+                        marker=dict(
+                            size=8,
+                            color=weekly_df['return_pct'],
+                            colorscale='RdYlGn_r',
+                            showscale=True,
+                            colorbar=dict(title="Return %")
+                        ),
+                        text=[f"Week {w}<br>Order: {q:.0f} bales<br>Return: {r:.1f}%" 
+                              for w, q, r in zip(weekly_df['week'], weekly_df['order_quantity'], weekly_df['return_pct'])],
+                        hovertemplate='%{text}<extra></extra>'
+                    ))
+                    
+                    if len(active_weeks) > 1:
+                        z = np.polyfit(active_weeks['order_quantity'], active_weeks['return_pct'], 1)
+                        p = np.poly1d(z)
+                        x_trend = np.linspace(active_weeks['order_quantity'].min(), active_weeks['order_quantity'].max(), 100)
+                        fig.add_trace(go.Scatter(
+                            x=x_trend,
+                            y=p(x_trend),
+                            mode='lines',
+                            name='Trend',
+                            line=dict(color='red', dash='dash', width=2)
+                        ))
+                    
+                    fig.update_layout(
+                        title=f"Weekly Order Quantity vs Return Rate - {selected_branch}",
+                        xaxis_title="Weekly Order Quantity (bales)",
+                        yaxis_title="Weekly Return Rate (%)",
+                        height=500
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    st.subheader("🎯 Optimal Order Quantity Analysis")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.write("**Current Pattern:**")
+                        st.metric("Avg Weekly Order", f"{active_weeks['order_quantity'].mean():.0f} bales")
+                        st.metric("Avg Return Rate", f"{active_weeks['return_pct'].mean():.1f}%")
+                    
+                    with col2:
+                        st.write("**Optimal Pattern:**")
+                        st.metric("Recommended Order", f"{optimal_qty:.0f} bales")
+                        st.metric("Expected Return Rate", f"{optimal_return_rate:.1f}%")
+                    
+                    with col3:
+                        st.write("**Improvement:**")
+                        current_avg_return = active_weeks['return_pct'].mean()
+                        improvement = current_avg_return - optimal_return_rate
+                        improvement_pct = (improvement / current_avg_return * 100) if current_avg_return > 0 else 0
+                        st.metric("Return Reduction", f"{improvement:.1f}%")
+                        st.metric("Improvement %", f"{improvement_pct:.1f}%")
+                    
+                    st.write(f"**Best Quartile:** {best_quartile}")
 
 elif page == "💡 Optimal Order Recommendations":
     st.header("💡 Optimal Order Recommendations for Each Store")
@@ -183,6 +587,7 @@ elif page == "💡 Optimal Order Recommendations":
                 if len(branch_row) > 0:
                     weekly_data = calculate_weekly_metrics(branch_row, numeric_cols)
                     
+                
                     if weekly_data:
                         active_weeks = [w for w in weekly_data if w['order_quantity'] > 0]
                         
@@ -196,7 +601,6 @@ elif page == "💡 Optimal Order Recommendations":
                                 qty_change_pct = ((optimal_qty - current_avg_qty) / current_avg_qty * 100)
                                 expected_improvement = current_avg_return - optimal_return_rate
                                 
-                                # Determine status
                                 if current_avg_return > 25:
                                     status = "🔴 CRITICAL"
                                     priority = 1
@@ -239,7 +643,6 @@ elif page == "💡 Optimal Order Recommendations":
                 
                 st.subheader("🎯 Recommendations by Priority")
                 
-                # Critical branches first
                 critical = rec_df[rec_df['Priority'] <= 2]
                 if len(critical) > 0:
                     st.write("### 🔴 Critical & High Priority Branches")
@@ -272,7 +675,6 @@ elif page == "💡 Optimal Order Recommendations":
                             st.write(f"**Correlation (Qty vs Returns):** {row['Correlation']:.3f}")
                             st.write(f"**Best Quartile:** {row['Best Quartile']}")
                 
-                # Moderate branches
                 moderate = rec_df[rec_df['Priority'] == 3]
                 if len(moderate) > 0:
                     st.write("### 🟡 Moderate Priority Branches")
@@ -303,7 +705,6 @@ elif page == "💡 Optimal Order Recommendations":
                             st.write("---")
                             st.write(f"**Confidence:** {row['Confidence']*100:.0f}%")
                 
-                # Good branches
                 good = rec_df[rec_df['Priority'] >= 4]
                 if len(good) > 0:
                     st.write("### 🟢 Good Performing Branches")
@@ -424,4 +825,4 @@ elif page == "💡 Optimal Order Recommendations":
                 )
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v30.0\n\nOptimal Order Recommendations Complete!")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v31.0\n\nAll tabs functional!")
