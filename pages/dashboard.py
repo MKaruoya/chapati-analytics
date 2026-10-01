@@ -5,6 +5,25 @@ import numpy as np
 from utils import calculate_volatility, get_sales_volume_category, extract_outlet_name, calculate_quarter_trend
 from utils import calculate_monthly_metrics, get_active_periods
 
+def get_status_color(status):
+    colors = {
+        "CRITICAL": "#dc3545",
+        "HIGH": "#fd7e14",
+        "MODERATE": "#ffc107",
+        "WATCH": "#ffc107",
+        "GOOD": "#28a745",
+        "DELISTED": "#6c757d"
+    }
+    return colors.get(status, "#6c757d")
+
+def get_trend_color(trend):
+    if "Improving" in trend:
+        return "#28a745"
+    elif "Worsening" in trend:
+        return "#dc3545"
+    else:
+        return "#6c757d"
+
 def show():
     st.header("Dashboard")
     if st.session_state.data is None:
@@ -65,7 +84,7 @@ def show():
                             priority = 6
                             active_status = "Delisted"
                             m7_return_rate = last_period_end['return_rate']
-                        branch_metrics.append({'Branch': branch, 'Active Status': active_status, 'M7 Return Rate': m7_return_rate, 'Last Quarter Avg': last_quarter_avg, 'Quarter Trend': quarter_trend, 'Volume Category': volume_category, 'Volatility': volatility, 'Status': status, 'Priority': priority})
+                        branch_metrics.append({'Branch': branch, 'Active Status': active_status, 'M7 Return Rate': m7_return_rate, 'Last Quarter Avg': last_quarter_avg, 'Quarter Trend': quarter_trend, 'Volume Category': volume_category, 'Volatility': volatility, 'Status': status, 'Priority': priority, 'Overall Trend': overall_trend})
             if branch_metrics:
                 metrics_df = pd.DataFrame(branch_metrics)
                 st.subheader("Summary")
@@ -79,26 +98,89 @@ def show():
                 col4.metric("Avg Return %", f"{avg_rate:.1f}%")
                 critical_count = len(metrics_df[metrics_df['Status'].isin(['CRITICAL', 'HIGH'])])
                 col5.metric("Issues", critical_count)
+                
                 st.subheader("Active Branches")
                 active_df = metrics_df[metrics_df['Active Status'] == 'Active'].sort_values('Priority')
                 if len(active_df) > 0:
-                    display_active = active_df[['Branch', 'M7 Return Rate', 'Last Quarter Avg', 'Quarter Trend', 'Volume Category', 'Status']].copy()
+                    display_active = active_df[['Branch', 'M7 Return Rate', 'Last Quarter Avg', 'Quarter Trend', 'Overall Trend', 'Volume Category', 'Status']].copy()
                     display_active['M7 Return Rate'] = display_active['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
                     display_active['Last Quarter Avg'] = display_active['Last Quarter Avg'].apply(lambda x: f"{x:.1f}%" if x else "N/A")
+                    
+                    st.markdown("""
+                    <style>
+                    .status-critical { color: #dc3545; font-weight: bold; }
+                    .status-high { color: #fd7e14; font-weight: bold; }
+                    .status-moderate { color: #ffc107; font-weight: bold; }
+                    .status-watch { color: #ffc107; font-weight: bold; }
+                    .status-good { color: #28a745; font-weight: bold; }
+                    .trend-improving { color: #28a745; font-weight: bold; }
+                    .trend-worsening { color: #dc3545; font-weight: bold; }
+                    .trend-stable { color: #6c757d; font-weight: bold; }
+                    </style>
+                    """, unsafe_allow_html=True)
+                    
                     st.dataframe(display_active, use_container_width=True, hide_index=True)
+                
+                st.subheader("Status Breakdown")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("**Critical & High Priority**")
+                    critical_df = metrics_df[metrics_df['Status'].isin(['CRITICAL', 'HIGH'])].sort_values('Priority')
+                    if len(critical_df) > 0:
+                        for idx, row in critical_df.iterrows():
+                            st.markdown(f"<span style='color: {get_status_color(row['Status'])}; font-weight: bold;'>{row['Branch']}</span> - {row['M7 Return Rate']:.1f}%", unsafe_allow_html=True)
+                    else:
+                        st.success("None")
+                
+                with col2:
+                    st.markdown("**Improving Branches**")
+                    improving_df = metrics_df[metrics_df['Overall Trend'] == 'Improving']
+                    if len(improving_df) > 0:
+                        for idx, row in improving_df.iterrows():
+                            st.markdown(f"<span style='color: #28a745; font-weight: bold;'>{row['Branch']}</span> - {row['M7 Return Rate']:.1f}%", unsafe_allow_html=True)
+                    else:
+                        st.info("None")
+                
+                with col3:
+                    st.markdown("**Worsening Branches**")
+                    worsening_df = metrics_df[metrics_df['Overall Trend'] == 'Worsening']
+                    if len(worsening_df) > 0:
+                        for idx, row in worsening_df.iterrows():
+                            st.markdown(f"<span style='color: #dc3545; font-weight: bold;'>{row['Branch']}</span> - {row['M7 Return Rate']:.1f}%", unsafe_allow_html=True)
+                    else:
+                        st.info("None")
+                
                 st.subheader("Visualizations")
                 col1, col2 = st.columns(2)
                 with col1:
                     active_only = metrics_df[metrics_df['Active Status'] == 'Active']
                     if len(active_only) > 0:
                         fig = go.Figure()
-                        fig.add_trace(go.Bar(x=active_only['Branch'], y=active_only['M7 Return Rate'], marker=dict(color=active_only['M7 Return Rate'], colorscale='RdYlGn_r')))
-                        fig.update_layout(title="Return Rate by Branch", height=450, xaxis_tickangle=-45, showlegend=False, font=dict(size=11))
+                        colors = [get_status_color(status) for status in active_only['Status']]
+                        fig.add_trace(go.Bar(
+                            x=active_only['Branch'],
+                            y=active_only['M7 Return Rate'],
+                            marker=dict(color=colors),
+                            text=active_only['M7 Return Rate'].apply(lambda x: f"{x:.1f}%"),
+                            textposition='auto',
+                            hovertemplate='<b>%{x}</b><br>Return Rate: %{y:.1f}%<extra></extra>'
+                        ))
+                        fig.update_layout(title="Return Rate by Branch (Color-coded by Status)", height=450, xaxis_tickangle=-45, showlegend=False, font=dict(size=11))
                         st.plotly_chart(fig, use_container_width=True)
+                
                 with col2:
                     active_only = metrics_df[metrics_df['Active Status'] == 'Active']
                     if len(active_only) > 0:
                         fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=active_only['M7 Return Rate'], y=active_only['Volatility'], mode='markers', marker=dict(size=10, color=active_only['M7 Return Rate'], colorscale='RdYlGn_r'), text=active_only['Branch']))
-                        fig.update_layout(title="Return Rate vs Volatility", xaxis_title="Return Rate (%)", yaxis_title="Volatility (%)", height=450, showlegend=False, font=dict(size=11))
+                        trend_colors = [get_trend_color(trend) for trend in active_only['Overall Trend']]
+                        fig.add_trace(go.Scatter(
+                            x=active_only['M7 Return Rate'],
+                            y=active_only['Volatility'],
+                            mode='markers',
+                            marker=dict(size=12, color=trend_colors, line=dict(color='#2c3e50', width=1)),
+                            text=active_only['Branch'],
+                            hovertemplate='<b>%{text}</b><br>Return Rate: %{x:.1f}%<br>Volatility: %{y:.1f}%<extra></extra>'
+                        ))
+                        fig.update_layout(title="Return Rate vs Volatility (Color-coded by Trend)", xaxis_title="Return Rate (%)", yaxis_title="Volatility (%)", height=450, showlegend=False, font=dict(size=11))
                         st.plotly_chart(fig, use_container_width=True)
