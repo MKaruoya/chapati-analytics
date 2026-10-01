@@ -1,4 +1,5 @@
 ﻿import numpy as np
+import pandas as pd
 
 def calculate_volatility(monthly_data):
     return_rates = [m['return_rate'] for m in monthly_data if m['has_data']]
@@ -67,4 +68,43 @@ def find_optimal_quantity(weekly_data):
     confidence = min(len(active_weeks) / 35, 1.0)
     return optimal_qty, optimal_return_rate, corr, best_quartile[0], confidence
 
-import pandas as pd
+def calculate_monthly_metrics(branch_row, numeric_cols):
+    monthly_data = []
+    weeks_per_month = 5
+    for month_num in range(1, 10):
+        start_week = (month_num - 1) * weeks_per_month
+        end_week = month_num * weeks_per_month
+        month_sales = 0
+        month_returns = 0
+        has_data = False
+        for i in range(start_week * 2, min(end_week * 2, len(numeric_cols)), 2):
+            if i < len(numeric_cols) - 1:
+                net_sales_val = pd.to_numeric(branch_row[numeric_cols[i]].values[0], errors='coerce')
+                returns_val = pd.to_numeric(branch_row[numeric_cols[i + 1]].values[0], errors='coerce')
+                if pd.notna(net_sales_val) or pd.notna(returns_val):
+                    net_sales_val = net_sales_val if pd.notna(net_sales_val) else 0
+                    returns_val = returns_val if pd.notna(returns_val) else 0
+                    month_sales += net_sales_val
+                    month_returns += returns_val
+                    has_data = True
+        if has_data:
+            original_order = abs(month_sales) + month_returns
+            return_rate = (month_returns / original_order * 100) if original_order > 0 else 0
+        else:
+            return_rate = 0
+        monthly_data.append({'month_num': month_num, 'sales': month_sales, 'returns': month_returns, 'return_rate': return_rate, 'has_data': has_data})
+    return monthly_data
+
+def get_active_periods(monthly_data):
+    active_periods = []
+    current_period = []
+    for m in monthly_data:
+        if m['has_data']:
+            current_period.append(m)
+        else:
+            if current_period:
+                active_periods.append(current_period)
+                current_period = []
+    if current_period:
+        active_periods.append(current_period)
+    return active_periods
