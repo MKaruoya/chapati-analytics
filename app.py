@@ -10,6 +10,7 @@ st.title("🍞 Chapati Data Analysis Agent")
 st.sidebar.header("📊 Navigation")
 page = st.sidebar.radio("Select Analysis", [
     "📤 Upload Data",
+    "📊 Dashboard",
     "📈 Store Analysis",
     "🤖 AI Relationship Analysis",
     "💡 Optimal Order Recommendations"
@@ -81,7 +82,7 @@ if page == "📤 Upload Data":
                 st.write(f"**Filled Cells:** {filled_cells:,} / {total_cells:,}")
             
             st.subheader("✅ Ready for Analysis!")
-            st.write("Go to **Store Analysis** to view week-by-week and month-by-month performance for any branch.")
+            st.write("Go to **Dashboard** to see overall summary of all branches.")
             
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
@@ -89,7 +90,231 @@ if page == "📤 Upload Data":
             st.write(traceback.format_exc())
 
 # ============================================================================
-# PAGE 2: STORE ANALYSIS
+# PAGE 2: DASHBOARD
+# ============================================================================
+elif page == "📊 Dashboard":
+    st.header("Overall Branch Performance Dashboard")
+    
+    if st.session_state.data is None:
+        st.warning("⚠️ Please upload data first!")
+    else:
+        df = st.session_state.data.copy()
+        
+        # Get all branches
+        all_names = df['Branch'].dropna().unique()
+        branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
+        
+        if not branches:
+            st.warning("⚠️ No branches found in data")
+        else:
+            # Calculate metrics for all branches
+            branch_metrics = []
+            numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
+            
+            for branch in branches:
+                branch_row = df[df['Branch'] == branch]
+                
+                if len(branch_row) > 0:
+                    # Extract weekly data
+                    weekly_net_sales = []
+                    weekly_returns = []
+                    
+                    for i in range(0, len(numeric_cols) - 1, 2):
+                        net_sales_val = pd.to_numeric(branch_row[numeric_cols[i]].values[0], errors='coerce')
+                        returns_val = pd.to_numeric(branch_row[numeric_cols[i + 1]].values[0], errors='coerce')
+                        
+                        if pd.notna(net_sales_val):
+                            weekly_net_sales.append(net_sales_val)
+                        if pd.notna(returns_val):
+                            weekly_returns.append(returns_val)
+                    
+                    if weekly_net_sales and weekly_returns:
+                        # Calculate metrics
+                        total_sales = sum(weekly_net_sales)
+                        total_returns = sum(weekly_returns)
+                        avg_sales = np.mean(weekly_net_sales)
+                        avg_returns = np.mean(weekly_returns)
+                        
+                        # Sales trend
+                        if len(weekly_net_sales) > 1:
+                            sales_trend = "📈" if weekly_net_sales[-1] > weekly_net_sales[0] else "📉" if weekly_net_sales[-1] < weekly_net_sales[0] else "➡️"
+                            sales_change = ((weekly_net_sales[-1] - weekly_net_sales[0]) / abs(weekly_net_sales[0]) * 100) if weekly_net_sales[0] != 0 else 0
+                        else:
+                            sales_trend = "➡️"
+                            sales_change = 0
+                        
+                        # Returns trend
+                        if len(weekly_returns) > 1:
+                            returns_trend = "📈" if weekly_returns[-1] > weekly_returns[0] else "📉" if weekly_returns[-1] < weekly_returns[0] else "➡️"
+                            returns_change = ((weekly_returns[-1] - weekly_returns[0]) / abs(weekly_returns[0]) * 100) if weekly_returns[0] != 0 else 0
+                        else:
+                            returns_trend = "➡️"
+                            returns_change = 0
+                        
+                        # Return rate
+                        original_order = abs(total_sales) + total_returns
+                        if original_order > 0:
+                            return_rate = (total_returns / original_order) * 100
+                        else:
+                            return_rate = 0
+                        
+                        # Status
+                        if total_sales < 0:
+                            status = "🔴 CRITICAL"
+                        elif return_rate > 30:
+                            status = "🔴 HIGH"
+                        elif return_rate > 20:
+                            status = "🟡 MODERATE"
+                        elif return_rate > 15:
+                            status = "🟡 WATCH"
+                        else:
+                            status = "🟢 GOOD"
+                        
+                        branch_metrics.append({
+                            'Branch': branch,
+                            'Total Sales': total_sales,
+                            'Total Returns': total_returns,
+                            'Avg Weekly Sales': avg_sales,
+                            'Avg Weekly Returns': avg_returns,
+                            'Return Rate %': return_rate,
+                            'Sales Trend': sales_trend,
+                            'Sales Change %': sales_change,
+                            'Returns Trend': returns_trend,
+                            'Returns Change %': returns_change,
+                            'Status': status,
+                            'Weeks': len(weekly_net_sales)
+                        })
+            
+            if branch_metrics:
+                metrics_df = pd.DataFrame(branch_metrics)
+                
+                # ===== SUMMARY CARDS =====
+                st.subheader("📊 Overall Summary")
+                col1, col2, col3, col4, col5 = st.columns(5)
+                
+                col1.metric("Total Branches", len(metrics_df))
+                col2.metric("Avg Return Rate", f"{metrics_df['Return Rate %'].mean():.1f}%")
+                col3.metric("Total Sales", f"{metrics_df['Total Sales'].sum():.0f} bales")
+                col4.metric("Total Returns", f"{metrics_df['Total Returns'].sum():.0f} bales")
+                
+                critical_count = len(metrics_df[metrics_df['Status'].str.contains('CRITICAL')])
+                col5.metric("Critical Issues", critical_count, delta=f"🔴" if critical_count > 0 else "✅")
+                
+                # ===== CRITICAL BRANCHES =====
+                critical_branches = metrics_df[metrics_df['Status'].str.contains('CRITICAL|HIGH')]
+                if len(critical_branches) > 0:
+                    st.subheader("🔴 Branches Needing Immediate Attention")
+                    display_critical = critical_branches[['Branch', 'Total Sales', 'Return Rate %', 'Status']].copy()
+                    display_critical['Return Rate %'] = display_critical['Return Rate %'].apply(lambda x: f"{x:.1f}%")
+                    st.dataframe(display_critical, use_container_width=True)
+                
+                # ===== SALES PERFORMANCE =====
+                st.subheader("📈 Sales Performance")
+                
+                tab1, tab2, tab3 = st.tabs(["Declining Sales", "Growing Sales", "All Branches"])
+                
+                with tab1:
+                    declining = metrics_df[metrics_df['Sales Change %'] < -5].sort_values('Sales Change %')
+                    if len(declining) > 0:
+                        display_declining = declining[['Branch', 'Total Sales', 'Sales Change %', 'Status']].copy()
+                        display_declining['Sales Change %'] = display_declining['Sales Change %'].apply(lambda x: f"{x:.1f}%")
+                        st.dataframe(display_declining, use_container_width=True)
+                    else:
+                        st.info("✅ No branches with declining sales")
+                
+                with tab2:
+                    growing = metrics_df[metrics_df['Sales Change %'] > 5].sort_values('Sales Change %', ascending=False)
+                    if len(growing) > 0:
+                        display_growing = growing[['Branch', 'Total Sales', 'Sales Change %', 'Status']].copy()
+                        display_growing['Sales Change %'] = display_growing['Sales Change %'].apply(lambda x: f"{x:.1f}%")
+                        st.dataframe(display_growing, use_container_width=True)
+                    else:
+                        st.info("ℹ️ No branches with significant growth")
+                
+                with tab3:
+                    display_all = metrics_df[['Branch', 'Total Sales', 'Return Rate %', 'Sales Trend', 'Status']].copy()
+                    display_all['Return Rate %'] = display_all['Return Rate %'].apply(lambda x: f"{x:.1f}%")
+                    st.dataframe(display_all.sort_values('Return Rate %', ascending=False), use_container_width=True)
+                
+                # ===== RETURN RATE ANALYSIS =====
+                st.subheader("🔍 Return Rate Analysis")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("**Highest Return Rates:**")
+                    high_returns = metrics_df.nlargest(5, 'Return Rate %')[['Branch', 'Return Rate %']]
+                    for idx, row in high_returns.iterrows():
+                        st.write(f"  🔴 {row['Branch']}: {row['Return Rate %']:.1f}%")
+                
+                with col2:
+                    st.write("**Lowest Return Rates:**")
+                    low_returns = metrics_df.nsmallest(5, 'Return Rate %')[['Branch', 'Return Rate %']]
+                    for idx, row in low_returns.iterrows():
+                        st.write(f"  🟢 {row['Branch']}: {row['Return Rate %']:.1f}%")
+                
+                # ===== CHARTS =====
+                st.subheader("📊 Visualizations")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Return rate distribution
+                    fig_returns = go.Figure()
+                    fig_returns.add_trace(go.Bar(
+                        x=metrics_df['Branch'].str[:30],  # Truncate long names
+                        y=metrics_df['Return Rate %'],
+                        marker_color=['🔴' if x > 30 else '🟡' if x > 20 else '🟢' for x in metrics_df['Return Rate %']],
+                        marker=dict(color=metrics_df['Return Rate %'], colorscale='RdYlGn_r', showscale=True)
+                    ))
+                    fig_returns.update_layout(title="Return Rate by Branch", height=400, xaxis_tickangle=-45)
+                    st.plotly_chart(fig_returns, use_container_width=True)
+                
+                with col2:
+                    # Sales comparison
+                    fig_sales = go.Figure()
+                    fig_sales.add_trace(go.Bar(
+                        x=metrics_df['Branch'].str[:30],
+                        y=metrics_df['Total Sales'],
+                        marker_color=['green' if x > 0 else 'red' for x in metrics_df['Total Sales']]
+                    ))
+                    fig_sales.update_layout(title="Total Sales by Branch", height=400, xaxis_tickangle=-45)
+                    st.plotly_chart(fig_sales, use_container_width=True)
+                
+                # ===== TREND ANALYSIS =====
+                st.subheader("📈 Trend Analysis")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("**Sales Trends:**")
+                    improving_sales = len(metrics_df[metrics_df['Sales Change %'] > 5])
+                    declining_sales = len(metrics_df[metrics_df['Sales Change %'] < -5])
+                    stable_sales = len(metrics_df[(metrics_df['Sales Change %'] >= -5) & (metrics_df['Sales Change %'] <= 5)])
+                    
+                    fig_sales_trend = go.Figure(data=[
+                        go.Pie(labels=['📈 Growing', '📉 Declining', '➡️ Stable'],
+                               values=[improving_sales, declining_sales, stable_sales],
+                               marker=dict(colors=['green', 'red', 'gray']))
+                    ])
+                    st.plotly_chart(fig_sales_trend, use_container_width=True)
+                
+                with col2:
+                    st.write("**Return Rate Status:**")
+                    critical = len(metrics_df[metrics_df['Return Rate %'] > 30])
+                    high = len(metrics_df[(metrics_df['Return Rate %'] > 20) & (metrics_df['Return Rate %'] <= 30)])
+                    moderate = len(metrics_df[(metrics_df['Return Rate %'] > 15) & (metrics_df['Return Rate %'] <= 20)])
+                    good = len(metrics_df[metrics_df['Return Rate %'] <= 15])
+                    
+                    fig_status = go.Figure(data=[
+                        go.Pie(labels=['🔴 Critical', '🟡 High', '🟡 Moderate', '🟢 Good'],
+                               values=[critical, high, moderate, good],
+                               marker=dict(colors=['darkred', 'orange', 'yellow', 'green']))
+                    ])
+                    st.plotly_chart(fig_status, use_container_width=True)
+
+# ============================================================================
+# PAGE 3: STORE ANALYSIS
 # ============================================================================
 elif page == "📈 Store Analysis":
     st.header("Store-Level Analysis - Week by Week & Month by Month")
@@ -173,14 +398,10 @@ elif page == "📈 Store Analysis":
                     # ===== MONTHLY ANALYSIS =====
                     st.subheader("📊 Monthly Performance")
                     
-                    # Estimate months based on weeks
-                    # Assuming: Weeks 1-5 = Month 1, Weeks 6-10 = Month 2, etc.
-                    # But we need to be smarter - let's group by approximate month boundaries
-                    
-                    weeks_per_month = 5  # Approximate
+                    weeks_per_month = 5
                     monthly_data = []
                     
-                    for month_num in range(1, 10):  # Support up to 9 months
+                    for month_num in range(1, 10):
                         start_week = (month_num - 1) * weeks_per_month
                         end_week = month_num * weeks_per_month
                         
@@ -331,7 +552,7 @@ elif page == "📈 Store Analysis":
                 st.error(f"❌ No data found for {selected_branch}")
 
 # ============================================================================
-# PAGE 3: AI RELATIONSHIP ANALYSIS
+# PAGE 4: AI RELATIONSHIP ANALYSIS
 # ============================================================================
 elif page == "🤖 AI Relationship Analysis":
     st.header("AI: Relationship Analysis - Quantity, Interval & Returns")
@@ -363,7 +584,7 @@ elif page == "🤖 AI Relationship Analysis":
                     returns_val = pd.to_numeric(branch_row[numeric_cols[i + 1]].values[0], errors='coerce')
                     
                     if pd.notna(net_sales_val):
-                        weekly_net_sales.append(net_sales_val)
+                                                weekly_net_sales.append(net_sales_val)
                     if pd.notna(returns_val):
                         weekly_returns.append(returns_val)
                 
@@ -412,7 +633,7 @@ elif page == "🤖 AI Relationship Analysis":
                         st.write(f"**Returns Trend:** {returns_trend}")
 
 # ============================================================================
-# PAGE 4: OPTIMAL ORDER RECOMMENDATIONS
+# PAGE 5: OPTIMAL ORDER RECOMMENDATIONS
 # ============================================================================
 elif page == "💡 Optimal Order Recommendations":
     st.header("AI: Optimal Order Pattern Recommendations")
@@ -504,4 +725,4 @@ elif page == "💡 Optimal Order Recommendations":
                         st.write("- Maintain current practices")
 
 st.sidebar.markdown("---")
-st.sidebar.info("🍞 **Chapati Analytics Agent** v14.0\n\nMonth-by-month analysis added!")
+st.sidebar.info("🍞 **Chapati Analytics Agent** v15.0\n\nDashboard with all branches overview!")
