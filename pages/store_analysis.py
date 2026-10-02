@@ -1,6 +1,7 @@
 ﻿import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import numpy as np
 
 def show():
     st.header("Store Analysis")
@@ -10,49 +11,222 @@ def show():
         df = st.session_state.data.copy()
         all_names = df['Branch'].dropna().unique()
         branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
+        
         if branches:
             selected_branch = st.selectbox("Select branch", sorted(branches), label_visibility="collapsed")
             branch_row = df[df['Branch'] == selected_branch]
+            
             if len(branch_row) > 0:
                 numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
                 weekly_data = []
                 week_num = 1
+                
                 for i in range(0, len(numeric_cols) - 1, 2):
                     net_sales_val = pd.to_numeric(branch_row[numeric_cols[i]].values[0], errors='coerce')
                     returns_val = pd.to_numeric(branch_row[numeric_cols[i + 1]].values[0], errors='coerce')
+                    
                     if pd.notna(net_sales_val) or pd.notna(returns_val):
                         net_sales_val = net_sales_val if pd.notna(net_sales_val) else 0
                         returns_val = returns_val if pd.notna(returns_val) else 0
                         original_order = abs(net_sales_val) + returns_val
                         return_pct = (returns_val / original_order * 100) if original_order > 0 else 0
-                        weekly_data.append({'Week': f"W{week_num}", 'Net Sales': f"{net_sales_val:.0f}", 'Returns': f"{returns_val:.0f}", 'Return %': f"{return_pct:.1f}%", 'net_sales_numeric': net_sales_val, 'returns_numeric': returns_val, 'return_pct_numeric': return_pct})
+                        
+                        weekly_data.append({
+                            'Week': week_num,
+                            'Net Sales': net_sales_val,
+                            'Returns': returns_val,
+                            'Return %': return_pct,
+                            'Order Qty': original_order
+                        })
                     week_num += 1
+                
                 if weekly_data:
-                    st.subheader("Weekly Performance")
                     weekly_df = pd.DataFrame(weekly_data)
-                    st.dataframe(weekly_df[['Week', 'Net Sales', 'Returns', 'Return %']], use_container_width=True, hide_index=True)
-                    st.subheader("Monthly Performance")
+                    
+                    # Calculate monthly data
                     weeks_per_month = 5
                     monthly_data = []
+                    
                     for month_num in range(1, 10):
                         start_week = (month_num - 1) * weeks_per_month
                         end_week = month_num * weeks_per_month
-                        month_weeks = weekly_data[start_week:end_week]
-                        if month_weeks:
-                            month_sales = sum([w['net_sales_numeric'] for w in month_weeks])
-                            month_returns = sum([w['returns_numeric'] for w in month_weeks])
-                            month_original = abs(month_sales) + month_returns
-                            month_return_pct = (month_returns / month_original * 100) if month_original > 0 else 0
-                            monthly_data.append({'Month': f"M{month_num}", 'Net Sales': f"{month_sales:.0f}", 'Returns': f"{month_returns:.0f}", 'Return %': f"{month_return_pct:.1f}%", 'net_sales_numeric': month_sales, 'returns_numeric': month_returns, 'return_pct_numeric': month_return_pct})
+                        month_weeks = weekly_df[(weekly_df['Week'] > start_week) & (weekly_df['Week'] <= end_week)]
+                        
+                        if len(month_weeks) > 0:
+                            month_sales = month_weeks['Net Sales'].sum()
+                            month_returns = month_weeks['Returns'].sum()
+                            month_order = month_weeks['Order Qty'].sum()
+                            month_return_pct = (month_returns / month_order * 100) if month_order > 0 else 0
+                            
+                            monthly_data.append({
+                                'Month': month_num,
+                                'Net Sales': month_sales,
+                                'Returns': month_returns,
+                                'Return %': month_return_pct,
+                                'Order Qty': month_order
+                            })
+                    
                     if monthly_data:
                         monthly_df = pd.DataFrame(monthly_data)
-                        st.dataframe(monthly_df[['Month', 'Net Sales', 'Returns', 'Return %']], use_container_width=True, hide_index=True)
-                        st.subheader("Trend")
-                        monthly_df_plot = monthly_df.copy()
-                        monthly_df_plot['Net Sales'] = pd.to_numeric(monthly_df_plot['net_sales_numeric'])
-                        monthly_df_plot['Returns'] = pd.to_numeric(monthly_df_plot['returns_numeric'])
+                        
+                        # Extract branch name
+                        branch_name = selected_branch.split('-')[-1].strip() if '-' in selected_branch else selected_branch
+                        
+                        # Key Metrics
+                        st.subheader("Overview")
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        current_month = monthly_df.iloc[-1]
+                        avg_return = monthly_df['Return %'].mean()
+                        
+                        with col1:
+                            st.metric("Current Month Return Rate", f"{current_month['Return %']:.1f}%")
+                            st.caption("Month 7 performance")
+                        
+                        with col2:
+                            st.metric("Avg Return Rate", f"{avg_return:.1f}%")
+                            st.caption("Average across all months")
+                        
+                        with col3:
+                            st.metric("Current Month Sales", f"{current_month['Net Sales']:.0f}")
+                            st.caption("Net sales in Month 7")
+                        
+                        with col4:
+                            st.metric("Current Month Orders", f"{current_month['Order Qty']:.0f} bales")
+                            st.caption("Total order quantity")
+                        
+                        # Trend Analysis
+                        st.subheader("Monthly Trend")
+                        st.caption("Track performance over time (March to September)")
+                        
                         fig = go.Figure()
-                        fig.add_trace(go.Bar(x=monthly_df_plot['Month'], y=monthly_df_plot['Net Sales'], name='Net Sales', marker_color='#27ae60'))
-                        fig.add_trace(go.Bar(x=monthly_df_plot['Month'], y=monthly_df_plot['Returns'], name='Returns', marker_color='#e74c3c'))
-                        fig.update_layout(title="Monthly Net Sales vs Returns", barmode='group', height=450, showlegend=True, font=dict(size=11))
+                        
+                        # Add return rate line
+                        fig.add_trace(go.Scatter(
+                            x=monthly_df['Month'],
+                            y=monthly_df['Return %'],
+                            mode='lines+markers',
+                            name='Return Rate %',
+                            line=dict(color='#e74c3c', width=3),
+                            marker=dict(size=10),
+                            yaxis='y1'
+                        ))
+                        
+                        # Add order quantity bars
+                        fig.add_trace(go.Bar(
+                            x=monthly_df['Month'],
+                            y=monthly_df['Order Qty'],
+                            name='Order Quantity',
+                            marker_color='#3498db',
+                            opacity=0.3,
+                            yaxis='y2'
+                        ))
+                        
+                        fig.update_layout(
+                            title="Monthly Performance: Return Rate & Order Quantity",
+                            xaxis=dict(title="Month"),
+                            yaxis=dict(title="Return Rate (%)", titlefont=dict(color='#e74c3c'), tickfont=dict(color='#e74c3c')),
+                            yaxis2=dict(title="Order Quantity (bales)", titlefont=dict(color='#3498db'), tickfont=dict(color='#3498db'), overlaying='y', side='right'),
+                            hovermode='x unified',
+                            height=500,
+                            font=dict(size=11)
+                        )
+                        
                         st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Performance Analysis
+                        st.subheader("Performance Analysis")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("**Key Metrics**")
+                            
+                            # Calculate trend
+                            first_month_return = monthly_df.iloc[0]['Return %']
+                            last_month_return = monthly_df.iloc[-1]['Return %']
+                            trend = "Improving" if last_month_return < first_month_return else "Worsening" if last_month_return > first_month_return else "Stable"
+                            trend_color = "#28a745" if trend == "Improving" else "#dc3545" if trend == "Worsening" else "#6c757d"
+                            
+                            st.markdown(f"<span style='color: {trend_color}; font-weight: bold;'>Trend: {trend}</span>", unsafe_allow_html=True)
+                            st.write(f"Started at: {first_month_return:.1f}% | Current: {last_month_return:.1f}%")
+                            
+                            st.write("")
+                            st.markdown("**Best Month**")
+                            best_month = monthly_df.loc[monthly_df['Return %'].idxmin()]
+                            st.write(f"Month {int(best_month['Month'])}: {best_month['Return %']:.1f}% return rate")
+                            
+                            st.write("")
+                            st.markdown("**Worst Month**")
+                            worst_month = monthly_df.loc[monthly_df['Return %'].idxmax()]
+                            st.write(f"Month {int(worst_month['Month'])}: {worst_month['Return %']:.1f}% return rate")
+                        
+                        with col2:
+                            st.markdown("**Insights**")
+                            
+                            # Volatility
+                            volatility = monthly_df['Return %'].std()
+                            st.write(f"Volatility: {volatility:.1f}%")
+                            if volatility > 10:
+                                st.caption("High volatility - inconsistent performance")
+                            elif volatility > 5:
+                                st.caption("Moderate volatility - some fluctuation")
+                            else:
+                                st.caption("Low volatility - consistent performance")
+                            
+                            st.write("")
+                            
+                            # Correlation between order qty and returns
+                            if len(monthly_df) > 1:
+                                corr = monthly_df['Order Qty'].corr(monthly_df['Return %'])
+                                st.write(f"Order Qty vs Return Rate Correlation: {corr:.3f}")
+                                if corr > 0.3:
+                                    st.caption("Larger orders tend to have higher returns")
+                                elif corr < -0.3:
+                                    st.caption("Larger orders tend to have lower returns")
+                                else:
+                                    st.caption("No strong relationship between order size and returns")
+                        
+                        # Status Box
+                        st.subheader("Current Status")
+                        
+                        if current_month['Return %'] > 30:
+                            status_color = "#dc3545"
+                            status_text = "CRITICAL"
+                        elif current_month['Return %'] > 20:
+                            status_color = "#fd7e14"
+                            status_text = "HIGH"
+                        elif current_month['Return %'] > 15:
+                            status_color = "#ffc107"
+                            status_text = "MODERATE"
+                        else:
+                            status_color = "#28a745"
+                            status_text = "GOOD"
+                        
+                        st.markdown(f"""
+                        <div style='background: #f8f9fa; padding: 1.5rem; border-left: 4px solid {status_color}; border-radius: 4px;'>
+                            <b style='color: {status_color}; font-size: 18px;'>{status_text}</b><br>
+                            Return Rate: {current_month['Return %']:.1f}% | Trend: {trend}
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Detailed Data
+                        with st.expander("View Detailed Monthly Data"):
+                            display_monthly = monthly_df.copy()
+                            display_monthly['Month'] = display_monthly['Month'].apply(lambda x: f"M{int(x)}")
+                            display_monthly['Net Sales'] = display_monthly['Net Sales'].apply(lambda x: f"{x:.0f}")
+                            display_monthly['Returns'] = display_monthly['Returns'].apply(lambda x: f"{x:.0f}")
+                            display_monthly['Return %'] = display_monthly['Return %'].apply(lambda x: f"{x:.1f}%")
+                            display_monthly['Order Qty'] = display_monthly['Order Qty'].apply(lambda x: f"{x:.0f}")
+                            
+                            st.dataframe(display_monthly, use_container_width=True, hide_index=True)
+                        
+                        with st.expander("View Detailed Weekly Data"):
+                            display_weekly = weekly_df.copy()
+                            display_weekly['Week'] = display_weekly['Week'].apply(lambda x: f"W{int(x)}")
+                            display_weekly['Net Sales'] = display_weekly['Net Sales'].apply(lambda x: f"{x:.0f}")
+                            display_weekly['Returns'] = display_weekly['Returns'].apply(lambda x: f"{x:.0f}")
+                            display_weekly['Return %'] = display_weekly['Return %'].apply(lambda x: f"{x:.1f}%")
+                            display_weekly['Order Qty'] = display_weekly['Order Qty'].apply(lambda x: f"{x:.0f}")
+                            
+                            st.dataframe(display_weekly, use_container_width=True, hide_index=True)
