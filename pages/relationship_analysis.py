@@ -24,16 +24,13 @@ def show():
                 if weekly_data:
                     weekly_df = pd.DataFrame(weekly_data)
                     
-                    # Filter out weeks with no orders
                     active_weeks = weekly_df[weekly_df['order_quantity'] > 0]
                     
                     if len(active_weeks) > 0:
                         optimal_qty, optimal_return_rate, corr, best_quartile, confidence = find_optimal_quantity(weekly_data)
                         
-                        # Extract branch name
                         branch_name = selected_branch.split('-')[-1].strip() if '-' in selected_branch else selected_branch
                         
-                        # Key Metrics
                         st.subheader("Overview")
                         col1, col2, col3, col4 = st.columns(4)
                         
@@ -41,7 +38,7 @@ def show():
                         current_avg_return = active_weeks['return_pct'].mean()
                         
                         with col1:
-                            st.metric("Avg Weekly Order", f"{current_avg_qty:.0f} bales")
+                            st.metric("Avg Weekly Order", f"{current_avg_qty:.0f} pouches")
                             st.caption("Current pattern")
                         
                         with col2:
@@ -56,7 +53,6 @@ def show():
                             st.metric("Data Confidence", f"{confidence*100:.0f}%")
                             st.caption("Based on weeks analyzed")
                         
-                        # Correlation Explanation
                         st.subheader("What Does This Mean?")
                         
                         if corr > 0.5:
@@ -92,7 +88,6 @@ def show():
                             </div>
                             """, unsafe_allow_html=True)
                         
-                        # Scatter Plot
                         st.subheader("Order Quantity vs Return Rate")
                         st.caption("Each point represents one week of data")
                         
@@ -110,12 +105,11 @@ def show():
                                 showscale=True,
                                 colorbar=dict(title="Return %")
                             ),
-                            text=[f"Week {w}<br>Order: {q:.0f} bales<br>Return: {r:.1f}%" 
+                            text=[f"Week {w}<br>Order: {q:.0f} pouches<br>Return: {r:.1f}%" 
                                   for w, q, r in zip(weekly_df['week'], weekly_df['order_quantity'], weekly_df['return_pct'])],
                             hovertemplate='%{text}<extra></extra>'
                         ))
                         
-                        # Add trend line
                         if len(active_weeks) > 1:
                             z = np.polyfit(active_weeks['order_quantity'], active_weeks['return_pct'], 1)
                             p = np.poly1d(z)
@@ -130,7 +124,7 @@ def show():
                         
                         fig.update_layout(
                             title="Weekly Order Quantity vs Return Rate",
-                            xaxis_title="Order Quantity (bales)",
+                            xaxis_title="Order Quantity (pouches)",
                             yaxis_title="Return Rate (%)",
                             height=500,
                             font=dict(size=11),
@@ -138,7 +132,6 @@ def show():
                         )
                         st.plotly_chart(fig, use_container_width=True)
                         
-                        # Optimal Recommendation
                         st.subheader("Optimal Order Pattern")
                         st.caption("Based on historical data analysis")
                         
@@ -146,12 +139,12 @@ def show():
                         
                         with col1:
                             st.markdown("**Current Pattern**")
-                            st.metric("Weekly Order", f"{current_avg_qty:.0f} bales")
+                            st.metric("Weekly Order", f"{current_avg_qty:.0f} pouches")
                             st.metric("Return Rate", f"{current_avg_return:.1f}%")
                         
                         with col2:
                             st.markdown("**Recommended Pattern**")
-                            st.metric("Weekly Order", f"{optimal_qty:.0f} bales")
+                            st.metric("Weekly Order", f"{optimal_qty:.0f} pouches")
                             st.metric("Return Rate", f"{optimal_return_rate:.1f}%")
                         
                         with col3:
@@ -161,29 +154,28 @@ def show():
                             return_improvement = current_avg_return - optimal_return_rate
                             
                             if qty_change > 0:
-                                st.metric("Qty Change", f"+{qty_change:.0f} bales", delta=f"{qty_change_pct:+.1f}%")
+                                st.metric("Qty Change", f"+{qty_change:.0f} pouches", delta=f"{qty_change_pct:+.1f}%")
                             elif qty_change < 0:
-                                st.metric("Qty Change", f"{qty_change:.0f} bales", delta=f"{qty_change_pct:.1f}%")
+                                st.metric("Qty Change", f"{qty_change:.0f} pouches", delta=f"{qty_change_pct:.1f}%")
                             else:
-                                st.metric("Qty Change", "0 bales", delta="Maintain")
+                                st.metric("Qty Change", "0 pouches", delta="Maintain")
                             
                             st.metric("Return Reduction", f"{return_improvement:.1f}%")
                         
-                        # Recommendation Box
                         st.subheader("Recommendation")
                         
                         if optimal_qty > current_avg_qty:
                             rec_color = "#28a745"
                             rec_text = "INCREASE ORDER SIZE"
-                            rec_reason = f"Ordering {optimal_qty:.0f} bales per week (instead of {current_avg_qty:.0f}) should reduce returns from {current_avg_return:.1f}% to {optimal_return_rate:.1f}%."
+                            rec_reason = f"Ordering {optimal_qty:.0f} pouches per week (instead of {current_avg_qty:.0f}) should reduce returns from {current_avg_return:.1f}% to {optimal_return_rate:.1f}%."
                         elif optimal_qty < current_avg_qty:
                             rec_color = "#fd7e14"
                             rec_text = "DECREASE ORDER SIZE"
-                            rec_reason = f"Ordering {optimal_qty:.0f} bales per week (instead of {current_avg_qty:.0f}) should reduce returns from {current_avg_return:.1f}% to {optimal_return_rate:.1f}%."
+                            rec_reason = f"Ordering {optimal_qty:.0f} pouches per week (instead of {current_avg_qty:.0f}) should reduce returns from {current_avg_return:.1f}% to {optimal_return_rate:.1f}%."
                         else:
                             rec_color = "#6c757d"
                             rec_text = "MAINTAIN CURRENT SIZE"
-                            rec_reason = f"Current order size of {current_avg_qty:.0f} bales is already optimal."
+                            rec_reason = f"Current order size of {current_avg_qty:.0f} pouches is already optimal."
                         
                         st.markdown(f"""
                         <div style='background: #f8f9fa; padding: 1.5rem; border-left: 4px solid {rec_color}; border-radius: 4px;'>
@@ -193,7 +185,6 @@ def show():
                         </div>
                         """, unsafe_allow_html=True)
                         
-                        # Risk/Benefit Analysis
                         st.subheader("Risk & Benefit Analysis")
                         
                         col1, col2 = st.columns(2)
@@ -218,7 +209,6 @@ def show():
                             else:
                                 st.write("✓ No major risks - maintain current approach")
                         
-                        # Quartile Analysis
                         st.subheader("Performance by Order Size")
                         st.caption("How does return rate vary by order quantity quartile?")
                         
@@ -255,7 +245,6 @@ def show():
                         )
                         st.plotly_chart(fig_quartile, use_container_width=True)
                         
-                        # Detailed Data
                         with st.expander("View Detailed Weekly Data"):
                             display_weekly = weekly_df.copy()
                             display_weekly['Week'] = display_weekly['week'].apply(lambda x: f"W{int(x)}")

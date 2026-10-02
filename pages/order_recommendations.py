@@ -55,7 +55,6 @@ def show():
                                     status = "GOOD"
                                     priority = 4
                                 
-                                # Calculate effort level
                                 if abs(qty_change_pct) < 10:
                                     effort = "Low"
                                     effort_color = "#28a745"
@@ -66,7 +65,6 @@ def show():
                                     effort = "High"
                                     effort_color = "#fd7e14"
                                 
-                                # Calculate impact score (improvement * confidence)
                                 impact_score = expected_improvement * confidence
                                 
                                 recommendations.append({
@@ -91,7 +89,6 @@ def show():
                 rec_df = pd.DataFrame(recommendations)
                 rec_df = rec_df.sort_values('Priority')
                 
-                # Outlet-Level Summary
                 st.subheader("Outlet Impact Summary")
                 st.caption(f"If all recommendations are implemented for {selected_outlet}")
                 
@@ -109,7 +106,6 @@ def show():
                 col4.metric("Total Improvement", f"{total_improvement:.1f}%")
                 col5.metric("Improvement %", f"{total_improvement_pct:.1f}%")
                 
-                # Quick Wins Section
                 st.subheader("Quick Wins - High Impact, Low Effort")
                 st.caption("Start here for immediate results")
                 
@@ -121,7 +117,7 @@ def show():
                         
                         with col1:
                             st.markdown(f"**{row['Branch Name']}**")
-                            st.caption(f"Current: {row['Current Qty']:.0f} bales → Recommended: {row['Recommended Qty']:.0f} bales")
+                            st.caption(f"Current: {row['Current Qty']:.0f} pouches → Recommended: {row['Recommended Qty']:.0f} pouches")
                         
                         with col2:
                             st.metric("Return Reduction", f"{row['Expected Improvement']:.1f}%", label_visibility="collapsed")
@@ -134,7 +130,6 @@ def show():
                 else:
                     st.info("No quick wins available - all recommendations require significant effort")
                 
-                # Implementation Roadmap
                 st.subheader("Implementation Roadmap")
                 st.caption("Phased approach for rolling out recommendations")
                 
@@ -170,11 +165,9 @@ def show():
                     else:
                         st.caption("None")
                 
-                # All Recommendations
                 st.subheader("All Recommendations")
                 
                 for idx, row in rec_df.iterrows():
-                    # Determine status color
                     if row['Status'] == 'CRITICAL':
                         status_color = '#dc3545'
                     elif row['Status'] == 'HIGH':
@@ -184,26 +177,26 @@ def show():
                     else:
                         status_color = '#28a745'
                     
-                    with st.expander(f"{row['Branch Name']} | Current: {row['Current Qty']:.0f} → Recommended: {row['Recommended Qty']:.0f} bales | {row['Status']}"):
+                    with st.expander(f"{row['Branch Name']} | Current: {row['Current Qty']:.0f} → Recommended: {row['Recommended Qty']:.0f} pouches | {row['Status']}"):
                         col1, col2, col3, col4 = st.columns(4)
                         
                         with col1:
                             st.markdown("**Current Pattern**")
-                            st.write(f"Order: {row['Current Qty']:.0f} bales/week")
+                            st.write(f"Order: {row['Current Qty']:.0f} pouches/week")
                             st.write(f"Return Rate: {row['Current Return %']:.1f}%")
                         
                         with col2:
                             st.markdown("**Recommended Pattern**")
-                            st.write(f"Order: {row['Recommended Qty']:.0f} bales/week")
+                            st.write(f"Order: {row['Recommended Qty']:.0f} pouches/week")
                             st.write(f"Return Rate: {row['Expected Return %']:.1f}%")
                         
                         with col3:
                             st.markdown("**Change Required**")
                             if row['Qty Change'] > 0:
-                                st.write(f"Increase by {row['Qty Change']:.0f} bales")
+                                st.write(f"Increase by {row['Qty Change']:.0f} pouches")
                                 st.write(f"({row['Qty Change %']:+.1f}%)")
                             elif row['Qty Change'] < 0:
-                                st.write(f"Decrease by {abs(row['Qty Change']):.0f} bales")
+                                st.write(f"Decrease by {abs(row['Qty Change']):.0f} pouches")
                                 st.write(f"({row['Qty Change %']:.1f}%)")
                             else:
                                 st.write("No change needed")
@@ -217,11 +210,10 @@ def show():
                         st.markdown("---")
                         st.markdown("**Action Steps:**")
                         st.write("1. Review current ordering pattern with store manager")
-                        st.write(f"2. Adjust weekly order from {row['Current Qty']:.0f} to {row['Recommended Qty']:.0f} bales")
+                        st.write(f"2. Adjust weekly order from {row['Current Qty']:.0f} to {row['Recommended Qty']:.0f} pouches")
                         st.write("3. Monitor return rate for 2-3 weeks")
                         st.write(f"4. Expected improvement: {row['Expected Improvement']:.1f}% reduction in returns")
                 
-                # Visualizations
                 st.subheader("Visualizations")
                 
                 col1, col2 = st.columns(2)
@@ -274,7 +266,6 @@ def show():
                     )
                     st.plotly_chart(fig2, use_container_width=True)
                 
-                # Export Action Plan
                 st.subheader("Export Action Plan")
                 
                 export_df = rec_df[[
