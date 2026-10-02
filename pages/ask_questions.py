@@ -1,6 +1,5 @@
 ﻿import streamlit as st
 import pandas as pd
-from openai import OpenAI
 
 def show():
     st.header("Ask Questions")
@@ -10,9 +9,15 @@ def show():
         st.warning("Please upload data first")
     else:
         try:
+            from openai import OpenAI
+        except ImportError:
+            st.error("OpenAI library not installed. Please wait for dependencies to install.")
+            return
+        
+        try:
             api_key = st.secrets.get("OPENAI_API_KEY")
             if not api_key:
-                st.error("OpenAI API key not configured. Please add OPENAI_API_KEY to secrets.")
+                st.error("OpenAI API key not configured. Please add OPENAI_API_KEY to .streamlit/secrets.toml")
                 return
             
             client = OpenAI(api_key=api_key)
@@ -42,7 +47,7 @@ def show():
                 with st.spinner("Analyzing data..."):
                     try:
                         context = f"""You are a data analysis expert for a Chapati distribution company.
-                        
+
 {data_summary}
 
 Available branches: {', '.join(valid_branches[:5])}{'...' if len(valid_branches) > 5 else ''}
@@ -52,7 +57,7 @@ User Question: {question}
 Please provide a direct answer with specific insights."""
                         
                         response = client.messages.create(
-                            model="claude-3-5-sonnet-20241022",
+                            model="gpt-3.5-turbo",
                             max_tokens=1024,
                             messages=[
                                 {
@@ -62,7 +67,7 @@ Please provide a direct answer with specific insights."""
                             ]
                         )
                         
-                        answer = response.content[0].text
+                        answer = response.choices[0].message.content
                         
                         st.subheader("Answer")
                         st.markdown(answer)
