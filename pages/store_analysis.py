@@ -59,8 +59,14 @@ def show():
                         if len(month_weeks) > 0:
                             month_sales = month_weeks['Net Sales'].sum()
                             month_returns = month_weeks['Returns'].sum()
-                            month_order = month_weeks['Order Qty'].sum()
-                            month_return_pct = (month_returns / month_order * 100) if month_order > 0 else 0
+                            
+                            # Recalculate order qty from net sales + returns (not sum of weekly order qty)
+                            if month_sales < 0:
+                                month_order = 0
+                                month_return_pct = 0
+                            else:
+                                month_order = month_sales + month_returns
+                                month_return_pct = (month_returns / month_order * 100) if month_order > 0 else 0
                             
                             monthly_data.append({
                                 'Month': month_num,
