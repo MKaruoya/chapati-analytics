@@ -41,9 +41,16 @@ def calculate_weekly_metrics(branch_row, numeric_cols):
         if pd.notna(net_sales_val) or pd.notna(returns_val):
             net_sales_val = net_sales_val if pd.notna(net_sales_val) else 0
             returns_val = returns_val if pd.notna(returns_val) else 0
-            original_order = abs(net_sales_val) + returns_val
-            return_pct = (returns_val / original_order * 100) if original_order > 0 else 0
-            weekly_data.append({'week': len(weekly_data) + 1, 'order_quantity': original_order, 'net_sales': net_sales_val, 'returns': returns_val, 'return_pct': return_pct})
+            
+            # Handle negative sales
+            if net_sales_val < 0:
+                order_quantity = 0
+                return_pct = 0
+            else:
+                order_quantity = net_sales_val + returns_val
+                return_pct = (returns_val / order_quantity * 100) if order_quantity > 0 else 0
+            
+            weekly_data.append({'week': len(weekly_data) + 1, 'order_quantity': order_quantity, 'net_sales': net_sales_val, 'returns': returns_val, 'return_pct': return_pct})
     return weekly_data
 
 def find_optimal_quantity(weekly_data):
@@ -88,8 +95,13 @@ def calculate_monthly_metrics(branch_row, numeric_cols):
                     month_returns += returns_val
                     has_data = True
         if has_data:
-            original_order = abs(month_sales) + month_returns
-            return_rate = (month_returns / original_order * 100) if original_order > 0 else 0
+            # Handle negative sales
+            if month_sales < 0:
+                original_order = 0
+                return_rate = 0
+            else:
+                original_order = month_sales + month_returns
+                return_rate = (month_returns / original_order * 100) if original_order > 0 else 0
         else:
             return_rate = 0
         monthly_data.append({'month_num': month_num, 'sales': month_sales, 'returns': month_returns, 'return_rate': return_rate, 'has_data': has_data})
