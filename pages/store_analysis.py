@@ -29,10 +29,15 @@ def show():
                         net_sales_val = net_sales_val if pd.notna(net_sales_val) else 0
                         returns_val = returns_val if pd.notna(returns_val) else 0
                         
-                        # Correct calculation: Order Qty = abs(Net Sales) + Returns
-                        order_qty = abs(net_sales_val) + returns_val
-                        # Return % = Returns / Order Qty
-                        return_pct = (returns_val / order_qty * 100) if order_qty > 0 else 0
+                        # If net sales is negative, no order was placed (only delayed returns)
+                        if net_sales_val < 0:
+                            order_qty = 0
+                            return_pct = 0
+                        else:
+                            # Order Qty = Net Sales + Returns
+                            order_qty = net_sales_val + returns_val
+                            # Return % = Returns / Order Qty
+                            return_pct = (returns_val / order_qty * 100) if order_qty > 0 else 0
                         
                         weekly_data.append({
                             'Week': week_num,
