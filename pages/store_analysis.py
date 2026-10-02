@@ -124,9 +124,11 @@ def show():
                         
                         fig.update_layout(
                             title="Monthly Performance: Return Rate & Order Quantity",
-                            xaxis=dict(title="Month"),
-                            yaxis=dict(title="Return Rate (%)", titlefont=dict(color='#e74c3c'), tickfont=dict(color='#e74c3c')),
-                            yaxis2=dict(title="Order Quantity (bales)", titlefont=dict(color='#3498db'), tickfont=dict(color='#3498db'), overlaying='y', side='right'),
+                            xaxis_title="Month",
+                            yaxis_title="Return Rate (%)",
+                            yaxis2_title="Order Quantity (bales)",
+                            yaxis=dict(titlefont=dict(color='#e74c3c'), tickfont=dict(color='#e74c3c')),
+                            yaxis2=dict(titlefont=dict(color='#3498db'), tickfont=dict(color='#3498db'), overlaying='y', side='right'),
                             hovermode='x unified',
                             height=500,
                             font=dict(size=11)
