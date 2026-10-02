@@ -97,11 +97,10 @@ def show():
                         
                         # Trend Analysis
                         st.subheader("Monthly Trend")
-                        st.caption("Track performance over time (March to September)")
+                        st.caption("Return rate over time (March to September)")
                         
                         fig = go.Figure()
                         
-                        # Add return rate line
                         fig.add_trace(go.Scatter(
                             x=monthly_df['Month'],
                             y=monthly_df['Return %'],
@@ -109,32 +108,45 @@ def show():
                             name='Return Rate %',
                             line=dict(color='#e74c3c', width=3),
                             marker=dict(size=10),
-                            yaxis='y1'
-                        ))
-                        
-                        # Add order quantity bars
-                        fig.add_trace(go.Bar(
-                            x=monthly_df['Month'],
-                            y=monthly_df['Order Qty'],
-                            name='Order Quantity',
-                            marker_color='#3498db',
-                            opacity=0.3,
-                            yaxis='y2'
+                            fill='tozeroy',
+                            fillcolor='rgba(220, 53, 69, 0.1)'
                         ))
                         
                         fig.update_layout(
-                            title="Monthly Performance: Return Rate & Order Quantity",
+                            title="Monthly Return Rate Trend",
                             xaxis_title="Month",
                             yaxis_title="Return Rate (%)",
-                            yaxis2_title="Order Quantity (bales)",
-                            yaxis=dict(titlefont=dict(color='#e74c3c'), tickfont=dict(color='#e74c3c')),
-                            yaxis2=dict(titlefont=dict(color='#3498db'), tickfont=dict(color='#3498db'), overlaying='y', side='right'),
                             hovermode='x unified',
-                            height=500,
-                            font=dict(size=11)
+                            height=450,
+                            font=dict(size=11),
+                            showlegend=False
                         )
                         
                         st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Order Quantity Trend
+                        st.subheader("Order Quantity Trend")
+                        st.caption("Weekly order quantities over time")
+                        
+                        fig2 = go.Figure()
+                        
+                        fig2.add_trace(go.Bar(
+                            x=weekly_df['Week'],
+                            y=weekly_df['Order Qty'],
+                            name='Order Quantity',
+                            marker_color='#3498db'
+                        ))
+                        
+                        fig2.update_layout(
+                            title="Weekly Order Quantities",
+                            xaxis_title="Week",
+                            yaxis_title="Order Quantity (bales)",
+                            height=400,
+                            font=dict(size=11),
+                            showlegend=False
+                        )
+                        
+                        st.plotly_chart(fig2, use_container_width=True)
                         
                         # Performance Analysis
                         st.subheader("Performance Analysis")
