@@ -28,15 +28,18 @@ def show():
                     if pd.notna(net_sales_val) or pd.notna(returns_val):
                         net_sales_val = net_sales_val if pd.notna(net_sales_val) else 0
                         returns_val = returns_val if pd.notna(returns_val) else 0
-                        original_order = abs(net_sales_val) + returns_val
-                        return_pct = (returns_val / original_order * 100) if original_order > 0 else 0
+                        
+                        # Correct calculation: Order Qty = abs(Net Sales) + Returns
+                        order_qty = abs(net_sales_val) + returns_val
+                        # Return % = Returns / Order Qty
+                        return_pct = (returns_val / order_qty * 100) if order_qty > 0 else 0
                         
                         weekly_data.append({
                             'Week': week_num,
                             'Net Sales': net_sales_val,
                             'Returns': returns_val,
                             'Return %': return_pct,
-                            'Order Qty': original_order
+                            'Order Qty': order_qty
                         })
                     week_num += 1
                 
@@ -56,6 +59,7 @@ def show():
                             month_sales = month_weeks['Net Sales'].sum()
                             month_returns = month_weeks['Returns'].sum()
                             month_order = month_weeks['Order Qty'].sum()
+                            # Return % = Total Returns / Total Order Qty
                             month_return_pct = (month_returns / month_order * 100) if month_order > 0 else 0
                             
                             monthly_data.append({
