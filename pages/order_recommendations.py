@@ -19,21 +19,23 @@ def show():
         else:
             selected_outlet = st.selectbox("Select outlet", outlet_names, label_visibility="collapsed")
             outlet_branches = [b for b in valid_branches if extract_outlet_name(b) == selected_outlet]
-            
             numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
+            
             recommendations = []
             
             for branch in outlet_branches:
                 branch_row = df[df['Branch'] == branch]
                 if len(branch_row) > 0:
                     weekly_data = calculate_weekly_metrics(branch_row, numeric_cols)
-                    
                     if weekly_data:
                         active_weeks = [w for w in weekly_data if w['order_quantity'] > 0]
-                        
                         if active_weeks:
                             current_avg_qty = np.mean([w['order_quantity'] for w in active_weeks])
-                            current_avg_return = np.mean([w['return_pct'] for w in active_weeks])
+                            
+                            # Calculate overall return rate (not average of percentages)
+                            total_order_qty = sum([w['order_quantity'] for w in active_weeks])
+                            total_returns = sum([w['returns'] for w in active_weeks])
+                            current_avg_return = (total_returns / total_order_qty * 100) if total_order_qty > 0 else 0
                             
                             optimal_qty, optimal_return_rate, corr, best_quartile, confidence = find_optimal_quantity(weekly_data)
                             
@@ -220,18 +222,21 @@ def show():
                 
                 with col1:
                     fig = go.Figure()
+                    
                     fig.add_trace(go.Bar(
                         x=rec_df['Branch Name'],
                         y=rec_df['Current Qty'],
                         name='Current',
                         marker_color='#95a5a6'
                     ))
+                    
                     fig.add_trace(go.Bar(
                         x=rec_df['Branch Name'],
                         y=rec_df['Recommended Qty'],
                         name='Recommended',
                         marker_color='#3498db'
                     ))
+                    
                     fig.update_layout(
                         title="Current vs Recommended Order Quantities",
                         barmode='group',
@@ -240,22 +245,26 @@ def show():
                         showlegend=True,
                         font=dict(size=11)
                     )
+                    
                     st.plotly_chart(fig, use_container_width=True)
                 
                 with col2:
                     fig2 = go.Figure()
+                    
                     fig2.add_trace(go.Bar(
                         x=rec_df['Branch Name'],
                         y=rec_df['Current Return %'],
                         name='Current',
                         marker_color='#e74c3c'
                     ))
+                    
                     fig2.add_trace(go.Bar(
                         x=rec_df['Branch Name'],
                         y=rec_df['Expected Return %'],
                         name='Expected',
                         marker_color='#27ae60'
                     ))
+                    
                     fig2.update_layout(
                         title="Return Rate: Current vs Expected",
                         barmode='group',
@@ -264,6 +273,7 @@ def show():
                         showlegend=True,
                         font=dict(size=11)
                     )
+                    
                     st.plotly_chart(fig2, use_container_width=True)
                 
                 st.subheader("Export Action Plan")
@@ -291,6 +301,7 @@ def show():
                 st.dataframe(export_df, use_container_width=True, hide_index=True)
                 
                 csv = export_df.to_csv(index=False)
+                
                 st.download_button(
                     label="Download Action Plan as CSV",
                     data=csv,
