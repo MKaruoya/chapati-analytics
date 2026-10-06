@@ -57,12 +57,14 @@ def show():
         all_names = df['Branch'].dropna().unique()
         valid_branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
         outlet_names = sorted(set([extract_outlet_name(b) for b in valid_branches if extract_outlet_name(b)]))
+        
         if not outlet_names:
             st.error("No outlets found")
         else:
             selected_outlet = st.selectbox("Select outlet", outlet_names, label_visibility="collapsed")
             outlet_branches = [b for b in valid_branches if extract_outlet_name(b) == selected_outlet]
             numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
+            
             branch_metrics = []
             
             for branch in outlet_branches:
@@ -70,19 +72,24 @@ def show():
                 if len(branch_row) > 0:
                     monthly_data = calculate_monthly_metrics(branch_row, numeric_cols)
                     active_periods = get_active_periods(monthly_data)
+                    
                     if active_periods:
                         month_7 = monthly_data[6]
                         is_active_m7 = month_7['has_data']
+                        
                         if is_active_m7:
                             m7_return_rate = month_7['return_rate']
                             m7_sales = month_7['sales']
                         else:
                             m7_return_rate = None
                             m7_sales = None
+                        
                         last_quarter_avg, quarter_change, quarter_trend = calculate_quarter_trend(monthly_data)
                         first_period_start = active_periods[0][0]
                         last_period_end = active_periods[-1][-1]
+                        
                         overall_trend = "Improving" if last_period_end['return_rate'] < first_period_start['return_rate'] else "Worsening" if last_period_end['return_rate'] > first_period_start['return_rate'] else "Stable"
+                        
                         total_sales = sum([m['sales'] for m in monthly_data])
                         total_returns = sum([m['returns'] for m in monthly_data])
                         volatility = calculate_volatility(monthly_data)
@@ -159,6 +166,7 @@ def show():
                     colors = [get_status_color(status) for status in active_sorted['Status']]
                     
                     fig = go.Figure()
+                    
                     fig.add_trace(go.Bar(
                         x=active_sorted['Branch'],
                         y=active_sorted['M7 Return Rate'],
@@ -167,6 +175,7 @@ def show():
                         textposition='auto',
                         hovertemplate='<b>%{x}</b><br>Return Rate: %{y:.1f}%<extra></extra>'
                     ))
+                    
                     fig.update_layout(
                         title="Return Rate by Branch (Month 7)",
                         height=500,
@@ -175,41 +184,8 @@ def show():
                         font=dict(size=12),
                         yaxis_title="Return Rate (%)"
                     )
+                    
                     st.plotly_chart(fig, use_container_width=True)
-                
-                # Two Column Layout for Issues and Wins
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader("Issues to Address")
-                    st.caption("Branches with Critical or High return rates")
-                    critical_df = metrics_df[metrics_df['Status'].isin(['CRITICAL', 'HIGH'])].sort_values('Priority')
-                    if len(critical_df) > 0:
-                        for idx, row in critical_df.iterrows():
-                            color = get_status_color(row['Status'])
-                            st.markdown(f"""
-                            <div style='background: #f8f9fa; padding: 1rem; border-left: 4px solid {color}; border-radius: 4px; margin-bottom: 0.5rem;'>
-                                <b style='color: {color};'>{row['Branch']}</b><br>
-                                Return Rate: {row['M7 Return Rate']:.1f}% | Status: {row['Status']}
-                            </div>
-                            """, unsafe_allow_html=True)
-                    else:
-                        st.success("No critical issues")
-                
-                with col2:
-                    st.subheader("Improving Branches")
-                    st.caption("Branches with declining return rates (getting better)")
-                    improving_df = metrics_df[metrics_df['Overall Trend'] == 'Improving'].sort_values('M7 Return Rate')
-                    if len(improving_df) > 0:
-                        for idx, row in improving_df.iterrows():
-                            st.markdown(f"""
-                            <div style='background: #f8f9fa; padding: 1rem; border-left: 4px solid #28a745; border-radius: 4px; margin-bottom: 0.5rem;'>
-                                <b style='color: #28a745;'>{row['Branch']}</b><br>
-                                Return Rate: {row['M7 Return Rate']:.1f}% | Trend: Improving
-                            </div>
-                            """, unsafe_allow_html=True)
-                    else:
-                        st.info("No improving branches")
                 
                 # Trend Analysis with Explanations
                 st.subheader("Trend Analysis")
