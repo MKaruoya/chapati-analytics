@@ -108,65 +108,6 @@ def show():
                 col4.metric("Total Improvement", f"{total_improvement:.1f}%")
                 col5.metric("Improvement %", f"{total_improvement_pct:.1f}%")
                 
-                st.subheader("Quick Wins - High Impact, Low Effort")
-                st.caption("Start here for immediate results")
-                
-                quick_wins = rec_df[(rec_df['Effort'] == 'Low') & (rec_df['Expected Improvement'] > 2)].sort_values('Expected Improvement', ascending=False)
-                
-                if len(quick_wins) > 0:
-                    for idx, row in quick_wins.iterrows():
-                        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-                        
-                        with col1:
-                            st.markdown(f"**{row['Branch Name']}**")
-                            st.caption(f"Current: {row['Current Qty']:.0f} pouches → Recommended: {row['Recommended Qty']:.0f} pouches")
-                        
-                        with col2:
-                            st.metric("Return Reduction", f"{row['Expected Improvement']:.1f}%", label_visibility="collapsed")
-                        
-                        with col3:
-                            st.metric("Effort", row['Effort'], label_visibility="collapsed")
-                        
-                        with col4:
-                            st.metric("Confidence", f"{row['Confidence']*100:.0f}%", label_visibility="collapsed")
-                else:
-                    st.info("No quick wins available - all recommendations require significant effort")
-                
-                st.subheader("Implementation Roadmap")
-                st.caption("Phased approach for rolling out recommendations")
-                
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.markdown("**Phase 1: Immediate (Week 1-2)**")
-                    st.markdown("Quick wins - low effort, high impact")
-                    phase1 = quick_wins
-                    if len(phase1) > 0:
-                        for idx, row in phase1.iterrows():
-                            st.write(f"• {row['Branch Name']}")
-                    else:
-                        st.caption("None")
-                
-                with col2:
-                    st.markdown("**Phase 2: Short-term (Week 3-4)**")
-                    st.markdown("Medium effort, good impact")
-                    phase2 = rec_df[(rec_df['Effort'] == 'Medium')].sort_values('Expected Improvement', ascending=False)
-                    if len(phase2) > 0:
-                        for idx, row in phase2.iterrows():
-                            st.write(f"• {row['Branch Name']}")
-                    else:
-                        st.caption("None")
-                
-                with col3:
-                    st.markdown("**Phase 3: Long-term (Week 5+)**")
-                    st.markdown("High effort, requires planning")
-                    phase3 = rec_df[(rec_df['Effort'] == 'High')].sort_values('Expected Improvement', ascending=False)
-                    if len(phase3) > 0:
-                        for idx, row in phase3.iterrows():
-                            st.write(f"• {row['Branch Name']}")
-                    else:
-                        st.caption("None")
-                
                 st.subheader("All Recommendations")
                 
                 for idx, row in rec_df.iterrows():
