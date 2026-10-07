@@ -85,10 +85,6 @@ def show():
                             m7_sales = None
                         
                         last_quarter_avg, quarter_change, quarter_trend = calculate_quarter_trend(monthly_data)
-                        first_period_start = active_periods[0][0]
-                        last_period_end = active_periods[-1][-1]
-                        
-                        overall_trend = "Improving" if last_period_end['return_rate'] < first_period_start['return_rate'] else "Worsening" if last_period_end['return_rate'] > first_period_start['return_rate'] else "Stable"
                         
                         total_sales = sum([m['sales'] for m in monthly_data])
                         total_returns = sum([m['returns'] for m in monthly_data])
@@ -116,7 +112,7 @@ def show():
                             status = "DELISTED"
                             priority = 6
                             active_status = "Delisted"
-                            m7_return_rate = last_period_end['return_rate']
+                            m7_return_rate = last_quarter_avg if last_quarter_avg else 0
                         
                         branch_metrics.append({
                             'Branch': branch,
@@ -128,7 +124,7 @@ def show():
                             'Volatility': volatility,
                             'Status': status,
                             'Priority': priority,
-                            'Overall Trend': overall_trend
+                            'Overall Trend': quarter_trend
                         })
             
             if branch_metrics:
