@@ -17,11 +17,14 @@ def get_status_color(status):
     return colors.get(status, "#6c757d")
 
 def get_trend(overall_trend):
-    if overall_trend is None or overall_trend == "N/A":
+    if overall_trend is None or pd.isna(overall_trend):
         return "Stable"
-    if "Improving" in overall_trend:
+    overall_trend_str = str(overall_trend).strip()
+    if overall_trend_str == "N/A":
+        return "Stable"
+    if "Improving" in overall_trend_str:
         return "Improving"
-    elif "Worsening" in overall_trend:
+    elif "Worsening" in overall_trend_str:
         return "Worsening"
     else:
         return "Stable"
