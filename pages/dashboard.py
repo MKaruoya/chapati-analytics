@@ -196,7 +196,7 @@ def show():
                 
                 # Trend Analysis with Explanations
                 st.subheader("Trend Analysis")
-                st.caption("Compares return rates from early period (M1-M3) to recent period (M5-M7)")
+                st.caption("Linear regression analysis of return rate trends across all months - identifies overall direction (Improving/Worsening/Stable)")
                 
                 col1, col2, col3 = st.columns(3)
                 
