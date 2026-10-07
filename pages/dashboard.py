@@ -17,6 +17,8 @@ def get_status_color(status):
     return colors.get(status, "#6c757d")
 
 def get_trend(overall_trend):
+    if overall_trend is None or overall_trend == "N/A":
+        return "Stable"
     if "Improving" in overall_trend:
         return "Improving"
     elif "Worsening" in overall_trend:
