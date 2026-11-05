@@ -4,66 +4,79 @@ import numpy as np
 # Read the October dataset with multi-level headers
 df_oct = pd.read_csv('data/october_dataset.csv', header=[0, 1, 2])
 
-# Flatten multi-level columns
-new_columns = []
-for col in df_oct.columns:
-    if 'March' in str(col):
-        metric = 'Returns' if 'Returns' in str(col) else 'Sales'
-        new_columns.append(f'M1_{metric}')
-    elif 'April' in str(col):
-        metric = 'Returns' if 'Returns' in str(col) else 'Sales'
-        new_columns.append(f'M2_{metric}')
-    elif 'May' in str(col):
-        metric = 'Returns' if 'Returns' in str(col) else 'Sales'
-        new_columns.append(f'M3_{metric}')
-    elif 'June' in str(col):
-        metric = 'Returns' if 'Returns' in str(col) else 'Sales'
-        new_columns.append(f'M4_{metric}')
-    elif 'July' in str(col):
-        metric = 'Returns' if 'Returns' in str(col) else 'Sales'
-        new_columns.append(f'M5_{metric}')
-    elif 'August' in str(col):
-        metric = 'Returns' if 'Returns' in str(col) else 'Sales'
-        new_columns.append(f'M6_{metric}')
-    elif 'September' in str(col):
-        metric = 'Returns' if 'Returns' in str(col) else 'Sales'
-        new_columns.append(f'M7_{metric}')
-    elif 'October' in str(col):
-        metric = 'Returns' if 'Returns' in str(col) else 'Sales'
-        new_columns.append(f'M8_{metric}')
+print("Reading October data...")
+print(f"Original shape: {df_oct.shape}")
+
+# Get the first column (Branch names)
+branch_col = df_oct.iloc[:, 0]
+
+# Extract only columns that contain "Sum of" (actual data columns)
+data_cols = []
+for i, col in enumerate(df_oct.columns):
+    col_str = str(col)
+    if 'Sum of' in col_str:
+        data_cols.append(i)
+
+print(f"Found {len(data_cols)} data columns")
+
+# Extract branch and data columns
+df_clean = df_oct.iloc[:, [0] + data_cols].copy()
+
+# Flatten the multi-index columns
+new_columns = ['Branch']
+month_map = {
+    'March': 1, 'April': 2, 'May': 3, 'June': 4,
+    'July': 5, 'August': 6, 'September': 7, 'October': 8
+}
+
+for col in df_clean.columns[1:]:
+    col_str = str(col)
+    
+    # Find month
+    month_num = None
+    for month_name, num in month_map.items():
+        if month_name in col_str:
+            month_num = num
+            break
+    
+    # Find metric type
+    if month_num:
+        if 'Returns' in col_str:
+            new_columns.append(f'M{month_num}_Returns')
+        elif 'Sales' in col_str:
+            new_columns.append(f'M{month_num}_Sales')
     else:
         new_columns.append(str(col))
 
-df_oct.columns = new_columns
+df_clean.columns = new_columns
 
-# Get the first column as Branch
-df_oct = df_oct.iloc[:, :17]  # Keep only M1-M8 (16 columns) + Branch
+print(f"Cleaned columns: {df_clean.columns.tolist()}")
 
-# Rename first column to Branch
-first_col = df_oct.columns[0]
-df_oct.rename(columns={first_col: 'Branch'}, inplace=True)
-
-# Filter: Keep only rows that contain branch identifiers (have '-' or are customer segments)
-# Remove product rows (they contain "CHAPATI", "SOKO", etc.)
-df_oct['Branch'] = df_oct['Branch'].astype(str)
-df_oct = df_oct[~df_oct['Branch'].str.contains('CHAPATI|SOKO|Row Labels', case=False, na=False)]
+# Filter: Keep only rows that contain branch identifiers
+df_clean['Branch'] = df_clean['Branch'].astype(str)
+df_clean = df_clean[~df_clean['Branch'].str.contains('CHAPATI|SOKO|Row Labels|Unnamed|Column Labels', case=False, na=False)]
 
 # Remove rows with no branch name
-df_oct = df_oct[df_oct['Branch'].notna()]
-df_oct = df_oct[df_oct['Branch'] != '']
-df_oct = df_oct[df_oct['Branch'].str.strip() != '']
+df_clean = df_clean[df_clean['Branch'].notna()]
+df_clean = df_clean[df_clean['Branch'] != '']
+df_clean = df_clean[df_clean['Branch'].str.strip() != '']
 
 # Fill NaN with 0
-df_oct = df_oct.fillna(0)
+df_clean = df_clean.fillna(0)
 
 # Reset index
-df_oct = df_oct.reset_index(drop=True)
+df_clean = df_clean.reset_index(drop=True)
+# Remove the Total columns (last 2 columns)
+df_clean = df_clean.iloc[:, :-2]
 
 # Save
-df_oct.to_csv('data/october_dataset_transformed.csv', index=False)
+df_clean.to_csv('data/october_dataset_transformed.csv', index=False)
 
 print("✅ October data transformed successfully!")
-print(f"Branches: {len(df_oct)}")
-print(f"Columns: {len(df_oct.columns)}")
+print(f"Branches: {len(df_clean)}")
+print(f"Columns: {len(df_clean.columns)}")
+print(f"\nFinal columns: {df_clean.columns.tolist()}")
 print("\nFirst few rows:")
-print(df_oct.head(10))
+print(df_clean.head())
+print("\nData types:")
+print(df_clean.dtypes)
