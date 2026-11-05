@@ -24,29 +24,43 @@ def calculate_quarter_trend(monthly_data):
     if len(active_months) < 2:
         return None, None, "N/A"
     
-    # Get return rates for active months
-    return_rates = [m['return_rate'] for m in active_months]
+    # Compare Early (M1-M3) vs Recent (M6-M8)
+    early_period = [m for m in monthly_data if m['month_num'] in [1, 2, 3] and m['has_data']]
+    recent_period = [m for m in monthly_data if m['month_num'] in [6, 7, 8] and m['has_data']]
     
-    # Calculate last quarter average
-    last_quarter = active_months[-3:] if len(active_months) >= 3 else active_months
-    last_quarter_avg = np.mean([m['return_rate'] for m in last_quarter])
-    
-    # Use linear regression to determine trend
-    x = np.arange(len(return_rates))
-    y = np.array(return_rates)
-    
-    slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
-    
-    # Determine trend based on slope
-    if slope > 0.5:  # Significant increase
-        trend = "Worsening"
-        quarter_change = slope
-    elif slope < -0.5:  # Significant decrease
-        trend = "Improving"
-        quarter_change = slope
-    else:  # Small change
-        trend = "Stable"
-        quarter_change = slope
+    if early_period and recent_period:
+        early_avg = np.mean([m['return_rate'] for m in early_period])
+        recent_avg = np.mean([m['return_rate'] for m in recent_period])
+        
+        if recent_avg < early_avg - 2:
+            trend = "Improving"
+        elif recent_avg > early_avg + 2:
+            trend = "Worsening"
+        else:
+            trend = "Stable"
+        
+        quarter_change = recent_avg - early_avg
+        last_quarter_avg = recent_avg
+    else:
+        # Fallback to linear regression if not enough data
+        return_rates = [m['return_rate'] for m in active_months]
+        x = np.arange(len(return_rates))
+        y = np.array(return_rates)
+        
+        slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+        
+        if slope > 0.5:
+            trend = "Worsening"
+            quarter_change = slope
+        elif slope < -0.5:
+            trend = "Improving"
+            quarter_change = slope
+        else:
+            trend = "Stable"
+            quarter_change = slope
+        
+        last_quarter = active_months[-3:] if len(active_months) >= 3 else active_months
+        last_quarter_avg = np.mean([m['return_rate'] for m in last_quarter])
     
     return last_quarter_avg, quarter_change, trend
 
@@ -109,7 +123,9 @@ def calculate_monthly_metrics(branch_row, numeric_cols):
     monthly_data = []
     weeks_per_month = 5
     
-    for month_num in range(1, 10):
+    # Now calculate for 10 months (March to October)
+    for month_num in range(1, 9):  # 8 months: March to October
+
         start_week = (month_num - 1) * weeks_per_month
         end_week = month_num * weeks_per_month
         

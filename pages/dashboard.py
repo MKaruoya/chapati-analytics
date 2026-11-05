@@ -17,7 +17,6 @@ def get_status_color(status):
     return colors.get(status, "#6c757d")
 
 def get_trend(overall_trend):
-    # Handle all types of null/missing values
     if overall_trend is None:
         return "Stable"
     if isinstance(overall_trend, float) and np.isnan(overall_trend):
@@ -85,15 +84,15 @@ def show():
                     active_periods = get_active_periods(monthly_data)
                     
                     if active_periods:
-                        month_7 = monthly_data[6]
-                        is_active_m7 = month_7['has_data']
+                        month_8 = monthly_data[7]  # CHANGED: Month 8 (October) is index 7
+                        is_active_m8 = month_8['has_data']
                         
-                        if is_active_m7:
-                            m7_return_rate = month_7['return_rate']
-                            m7_sales = month_7['sales']
+                        if is_active_m8:
+                            m8_return_rate = month_8['return_rate']
+                            m8_sales = month_8['sales']
                         else:
-                            m7_return_rate = None
-                            m7_sales = None
+                            m8_return_rate = None
+                            m8_sales = None
                         
                         last_quarter_avg, quarter_change, quarter_trend = calculate_quarter_trend(monthly_data)
                         
@@ -102,17 +101,17 @@ def show():
                         volatility = calculate_volatility(monthly_data)
                         volume_category = get_sales_volume_category(abs(total_sales))
                         
-                        if is_active_m7:
-                            if m7_sales < 0:
+                        if is_active_m8:
+                            if m8_sales < 0:
                                 status = "CRITICAL"
                                 priority = 1
-                            elif m7_return_rate > 30:
+                            elif m8_return_rate > 30:
                                 status = "HIGH"
                                 priority = 2
-                            elif m7_return_rate > 20:
+                            elif m8_return_rate > 20:
                                 status = "MODERATE"
                                 priority = 3
-                            elif m7_return_rate > 15:
+                            elif m8_return_rate > 15:
                                 status = "WATCH"
                                 priority = 4
                             else:
@@ -123,12 +122,12 @@ def show():
                             status = "DELISTED"
                             priority = 6
                             active_status = "Delisted"
-                            m7_return_rate = last_quarter_avg if last_quarter_avg else 0
+                            m8_return_rate = last_quarter_avg if last_quarter_avg else 0
                         
                         branch_metrics.append({
                             'Branch': branch,
                             'Active Status': active_status,
-                            'M7 Return Rate': m7_return_rate,
+                            'M8 Return Rate': m8_return_rate,  # CHANGED: M7 to M8
                             'Last Quarter Avg': last_quarter_avg,
                             'Quarter Trend': quarter_trend,
                             'Volume Category': volume_category,
@@ -142,7 +141,6 @@ def show():
                 metrics_df = pd.DataFrame(branch_metrics)
                 active_df = metrics_df[metrics_df['Active Status'] == 'Active']
                 
-                # Key Metrics with Tooltips
                 st.subheader("Overview")
                 col1, col2, col3, col4 = st.columns(4)
                 
@@ -151,7 +149,7 @@ def show():
                     st.caption("Number of active branches")
                 
                 with col2:
-                    st.metric("Avg Return Rate", f"{active_df['M7 Return Rate'].mean():.1f}%")
+                    st.metric("Avg Return Rate", f"{active_df['M8 Return Rate'].mean():.1f}%")  # CHANGED: M7 to M8
                     st.caption("Average returns across all active branches")
                 
                 with col3:
@@ -164,27 +162,26 @@ def show():
                     st.metric("Improving", improving_count)
                     st.caption("Branches with declining return rates")
                 
-                # Main Visualization - Return Rate by Branch
                 st.subheader("Branch Performance")
                 st.caption("Color coding: Red = Critical/High | Orange = Moderate | Yellow = Watch | Green = Good")
                 
                 if len(active_df) > 0:
-                    active_sorted = active_df.sort_values('M7 Return Rate', ascending=False)
+                    active_sorted = active_df.sort_values('M8 Return Rate', ascending=False)  # CHANGED: M7 to M8
                     colors = [get_status_color(status) for status in active_sorted['Status']]
                     
                     fig = go.Figure()
                     
                     fig.add_trace(go.Bar(
                         x=active_sorted['Branch'],
-                        y=active_sorted['M7 Return Rate'],
+                        y=active_sorted['M8 Return Rate'],  # CHANGED: M7 to M8
                         marker=dict(color=colors, line=dict(color='#2c3e50', width=1)),
-                        text=active_sorted['M7 Return Rate'].apply(lambda x: f"{x:.1f}%"),
+                        text=active_sorted['M8 Return Rate'].apply(lambda x: f"{x:.1f}%"),  # CHANGED: M7 to M8
                         textposition='auto',
                         hovertemplate='<b>%{x}</b><br>Return Rate: %{y:.1f}%<extra></extra>'
                     ))
                     
                     fig.update_layout(
-                        title="Return Rate by Branch (Month 7)",
+                        title="Return Rate by Branch (Month 8 - October)",  # CHANGED: Month 7 to Month 8
                         height=500,
                         xaxis_tickangle=-45,
                         showlegend=False,
@@ -194,7 +191,6 @@ def show():
                     
                     st.plotly_chart(fig, use_container_width=True)
                 
-                # Trend Analysis with Explanations
                 st.subheader("Trend Analysis")
                 st.caption("Linear regression analysis of return rate trends across all months - identifies overall direction (Improving/Worsening/Stable)")
                 
@@ -215,7 +211,6 @@ def show():
                     st.metric("Worsening", worsening, delta=f"-{worsening}")
                     st.caption("Return rate is increasing (bad)")
                 
-                # Status Legend
                 st.subheader("Status Legend")
                 col1, col2, col3, col4, col5 = st.columns(5)
                 
@@ -234,17 +229,15 @@ def show():
                 with col5:
                     st.markdown("<span style='color: #28a745; font-weight: bold;'>GOOD</span> - Return rate < 15%", unsafe_allow_html=True)
                 
-                # Simplified Detailed Table
                 with st.expander("View All Branches - Detailed Data"):
                     display_df = active_df.copy()
                     display_df['Trend'] = display_df['Overall Trend'].apply(get_trend)
                     display_df['Action'] = display_df.apply(lambda row: get_action(row['Status'], row['Trend']), axis=1)
                     
-                    # Extract branch name (remove outlet prefix)
                     display_df['Branch Name'] = display_df['Branch'].apply(lambda x: x.split('-')[-1].strip() if '-' in x else x)
                     
-                    final_df = display_df[['Branch Name', 'M7 Return Rate', 'Trend', 'Status', 'Action']].copy()
-                    final_df['M7 Return Rate'] = final_df['M7 Return Rate'].apply(lambda x: f"{x:.1f}%")
+                    final_df = display_df[['Branch Name', 'M8 Return Rate', 'Trend', 'Status', 'Action']].copy()  # CHANGED: M7 to M8
+                    final_df['M8 Return Rate'] = final_df['M8 Return Rate'].apply(lambda x: f"{x:.1f}%")  # CHANGED: M7 to M8
                     final_df = final_df.sort_values('Status', key=lambda x: x.map({'CRITICAL': 0, 'HIGH': 1, 'MODERATE': 2, 'WATCH': 3, 'GOOD': 4}))
                     
                     st.dataframe(final_df, use_container_width=True, hide_index=True)
