@@ -65,13 +65,14 @@ def get_status_for_return_rate(return_rate):
 def show():
     st.header("Dashboard - October Analytics")
     
+    # Check if data is loaded
     if st.session_state.data is None:
         st.warning("⚠️ Please upload data first from the 'Upload Data' page")
         return
     
     df = st.session_state.data.copy()
     
-    # Extract valid branches
+    # Extract valid branches (must have '-' and not be CHAPATI)
     all_names = df['Branch'].dropna().unique()
     valid_branches = [
         name for name in all_names 
@@ -124,62 +125,66 @@ def show():
     branch_metrics = []
     
     for branch in outlet_branches:
-        branch_row = df[df['Branch'] == branch]
-        
-        if len(branch_row) == 0:
+        try:
+            branch_row = df[df['Branch'] == branch]
+            
+            if len(branch_row) == 0:
+                continue
+            
+            # Calculate monthly data
+            monthly_data = calculate_monthly_metrics(branch_row, numeric_cols)
+            active_periods = get_active_periods(monthly_data)
+            
+            if not active_periods:
+                continue
+            
+            # Get current month data (use last active month if M8 is empty)
+            current_month = None
+            for i in range(len(monthly_data) - 1, -1, -1):
+                if monthly_data[i]['has_data']:
+                    current_month = monthly_data[i]
+                    break
+            
+            if not current_month:
+                continue
+            
+            # Calculate metrics
+            current_return_rate = float(current_month['return_rate'])
+            current_sales = float(current_month['sales'])
+            
+            last_quarter_avg, quarter_change, quarter_trend = calculate_quarter_trend(monthly_data)
+            
+            total_sales = sum([m['sales'] for m in monthly_data])
+            total_returns = sum([m['returns'] for m in monthly_data])
+            volatility = calculate_volatility(monthly_data)
+            volume_category = get_sales_volume_category(abs(total_sales))
+            
+            # Determine status
+            if current_sales < 0:
+                status = "CRITICAL"
+                priority = 1
+            else:
+                status = get_status_for_return_rate(current_return_rate)
+                priority = {'CRITICAL': 1, 'HIGH': 2, 'MODERATE': 3, 'WATCH': 4, 'GOOD': 5}.get(status, 6)
+            
+            active_status = "Active"
+            
+            branch_metrics.append({
+                'Branch': branch,
+                'Active Status': active_status,
+                'Return Rate': current_return_rate,
+                'Last Quarter Avg': last_quarter_avg,
+                'Quarter Trend': quarter_trend,
+                'Volume Category': volume_category,
+                'Volatility': volatility,
+                'Status': status,
+                'Priority': priority,
+                'Overall Trend': quarter_trend,
+                'Total Sales': total_sales
+            })
+        except Exception as e:
+            st.warning(f"Error processing {branch}: {str(e)}")
             continue
-        
-        # Calculate monthly data
-        monthly_data = calculate_monthly_metrics(branch_row, numeric_cols)
-        active_periods = get_active_periods(monthly_data)
-        
-        if not active_periods:
-            continue
-        
-        # Get current month data (use last active month if M8 is empty)
-        current_month = None
-        for i in range(len(monthly_data) - 1, -1, -1):
-            if monthly_data[i]['has_data']:
-                current_month = monthly_data[i]
-                break
-        
-        if not current_month:
-            continue
-        
-        # Calculate metrics
-        current_return_rate = current_month['return_rate']
-        current_sales = current_month['sales']
-        
-        last_quarter_avg, quarter_change, quarter_trend = calculate_quarter_trend(monthly_data)
-        
-        total_sales = sum([m['sales'] for m in monthly_data])
-        total_returns = sum([m['returns'] for m in monthly_data])
-        volatility = calculate_volatility(monthly_data)
-        volume_category = get_sales_volume_category(abs(total_sales))
-        
-        # Determine status
-        if current_sales < 0:
-            status = "CRITICAL"
-            priority = 1
-        else:
-            status = get_status_for_return_rate(current_return_rate)
-            priority = {'CRITICAL': 1, 'HIGH': 2, 'MODERATE': 3, 'WATCH': 4, 'GOOD': 5}.get(status, 6)
-        
-        active_status = "Active"
-        
-        branch_metrics.append({
-            'Branch': branch,
-            'Active Status': active_status,
-            'Return Rate': current_return_rate,
-            'Last Quarter Avg': last_quarter_avg,
-            'Quarter Trend': quarter_trend,
-            'Volume Category': volume_category,
-            'Volatility': volatility,
-            'Status': status,
-            'Priority': priority,
-            'Overall Trend': quarter_trend,
-            'Total Sales': total_sales
-        })
     
     if not branch_metrics:
         st.info("ℹ️ No data available for selected outlet")
