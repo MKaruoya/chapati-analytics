@@ -51,8 +51,6 @@ def show():
     
     # Calculate monthly metrics
     monthly_data = calculate_monthly_metrics(branch_row, numeric_cols)
-    
-    # Convert to dataframe
     monthly_df = pd.DataFrame(monthly_data)
     
     # Filter to months with data
@@ -260,9 +258,9 @@ def show():
     
     with tab2:
         st.subheader("Weekly Breakdown")
-        st.caption("Estimated weekly distribution (assuming 5 weeks per month)")
+        st.caption("Estimated weekly distribution (5 weeks per month)")
         
-        # Create weekly data by distributing monthly data
+        # Create weekly data by distributing monthly data evenly
         weekly_data = []
         week_counter = 1
         
@@ -270,20 +268,19 @@ def show():
             month_num = int(month_row['month_num'])
             monthly_sales = month_row['sales']
             monthly_returns = month_row['returns']
+            monthly_return_rate = month_row['return_rate']
             
             # Distribute evenly across 5 weeks
             weekly_sales = monthly_sales / 5
             weekly_returns = monthly_returns / 5
             
             for week_in_month in range(1, 6):
-                weekly_return_rate = (weekly_returns / weekly_sales * 100) if weekly_sales > 0 else 0
-                
                 weekly_data.append({
                     'Week': week_counter,
                     'Month': f"M{month_num}",
                     'Sales': weekly_sales,
                     'Returns': weekly_returns,
-                    'Return Rate': weekly_return_rate
+                    'Return Rate': monthly_return_rate
                 })
                 week_counter += 1
         
@@ -315,8 +312,8 @@ def show():
         
         # Weekly data table
         display_weekly = weekly_df.copy()
-        display_weekly['Sales'] = display_weekly['Sales'].apply(lambda x: f"{x:.0f}")
-        display_weekly['Returns'] = display_weekly['Returns'].apply(lambda x: f"{x:.0f}")
+        display_weekly['Sales'] = display_weekly['Sales'].apply(lambda x: f"{x:.1f}")
+        display_weekly['Returns'] = display_weekly['Returns'].apply(lambda x: f"{x:.1f}")
         display_weekly['Return Rate'] = display_weekly['Return Rate'].apply(lambda x: f"{x:.1f}%")
         
         st.dataframe(display_weekly, use_container_width=True, hide_index=True)
