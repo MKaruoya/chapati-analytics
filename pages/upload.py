@@ -1,5 +1,6 @@
 ﻿import streamlit as st
 import pandas as pd
+import io
 
 def show():
     st.header("Data Upload")
@@ -23,15 +24,19 @@ def show():
             if file_name.endswith(('.xlsx', '.xls')):
                 # Read Excel with multi-level headers
                 try:
-                    df = pd.read_excel(uploaded_file, header=[0, 1, 2])
+                    df = pd.read_excel(uploaded_file, header=[0, 1, 2], engine='openpyxl')
                     file_format = "Excel (Raw)"
                     is_raw = True
-                except:
-                    # Try simple header
-                    uploaded_file.seek(0)
-                    df = pd.read_excel(uploaded_file)
-                    file_format = "Excel (Transformed)"
-                    is_raw = False
+                except Exception as e1:
+                    try:
+                        # Try simple header
+                        uploaded_file.seek(0)
+                        df = pd.read_excel(uploaded_file, engine='openpyxl')
+                        file_format = "Excel (Transformed)"
+                        is_raw = False
+                    except Exception as e2:
+                        st.error(f"Error reading Excel file: {str(e2)}")
+                        return
             
             elif file_name.endswith('.csv'):
                 # Read CSV with multi-level headers
