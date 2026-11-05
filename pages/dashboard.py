@@ -64,6 +64,7 @@ def show():
         st.warning("Please upload data first")
     else:
         df = st.session_state.data.copy()
+        
         all_names = df['Branch'].dropna().unique()
         valid_branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
         outlet_names = sorted(set([extract_outlet_name(b) for b in valid_branches if extract_outlet_name(b)]))
@@ -84,7 +85,7 @@ def show():
                     active_periods = get_active_periods(monthly_data)
                     
                     if active_periods:
-                        month_8 = monthly_data[7]  # CHANGED: Month 8 (October) is index 7
+                        month_8 = monthly_data[7]  # October is index 7 (8th month)
                         is_active_m8 = month_8['has_data']
                         
                         if is_active_m8:
@@ -127,7 +128,7 @@ def show():
                         branch_metrics.append({
                             'Branch': branch,
                             'Active Status': active_status,
-                            'M8 Return Rate': m8_return_rate,  # CHANGED: M7 to M8
+                            'M8 Return Rate': m8_return_rate,
                             'Last Quarter Avg': last_quarter_avg,
                             'Quarter Trend': quarter_trend,
                             'Volume Category': volume_category,
@@ -149,7 +150,7 @@ def show():
                     st.caption("Number of active branches")
                 
                 with col2:
-                    st.metric("Avg Return Rate", f"{active_df['M8 Return Rate'].mean():.1f}%")  # CHANGED: M7 to M8
+                    st.metric("Avg Return Rate", f"{active_df['M8 Return Rate'].mean():.1f}%")
                     st.caption("Average returns across all active branches")
                 
                 with col3:
@@ -166,22 +167,22 @@ def show():
                 st.caption("Color coding: Red = Critical/High | Orange = Moderate | Yellow = Watch | Green = Good")
                 
                 if len(active_df) > 0:
-                    active_sorted = active_df.sort_values('M8 Return Rate', ascending=False)  # CHANGED: M7 to M8
+                    active_sorted = active_df.sort_values('M8 Return Rate', ascending=False)
                     colors = [get_status_color(status) for status in active_sorted['Status']]
                     
                     fig = go.Figure()
                     
                     fig.add_trace(go.Bar(
                         x=active_sorted['Branch'],
-                        y=active_sorted['M8 Return Rate'],  # CHANGED: M7 to M8
+                        y=active_sorted['M8 Return Rate'],
                         marker=dict(color=colors, line=dict(color='#2c3e50', width=1)),
-                        text=active_sorted['M8 Return Rate'].apply(lambda x: f"{x:.1f}%"),  # CHANGED: M7 to M8
+                        text=active_sorted['M8 Return Rate'].apply(lambda x: f"{x:.1f}%"),
                         textposition='auto',
                         hovertemplate='<b>%{x}</b><br>Return Rate: %{y:.1f}%<extra></extra>'
                     ))
                     
                     fig.update_layout(
-                        title="Return Rate by Branch (Month 8 - October)",  # CHANGED: Month 7 to Month 8
+                        title="Return Rate by Branch (Month 8 - October)",
                         height=500,
                         xaxis_tickangle=-45,
                         showlegend=False,
@@ -236,8 +237,10 @@ def show():
                     
                     display_df['Branch Name'] = display_df['Branch'].apply(lambda x: x.split('-')[-1].strip() if '-' in x else x)
                     
-                    final_df = display_df[['Branch Name', 'M8 Return Rate', 'Trend', 'Status', 'Action']].copy()  # CHANGED: M7 to M8
-                    final_df['M8 Return Rate'] = final_df['M8 Return Rate'].apply(lambda x: f"{x:.1f}%")  # CHANGED: M7 to M8
+                    final_df = display_df[['Branch Name', 'M8 Return Rate', 'Trend', 'Status', 'Action']].copy()
+                    final_df['M8 Return Rate'] = final_df['M8 Return Rate'].apply(lambda x: f"{x:.1f}%")
                     final_df = final_df.sort_values('Status', key=lambda x: x.map({'CRITICAL': 0, 'HIGH': 1, 'MODERATE': 2, 'WATCH': 3, 'GOOD': 4}))
                     
                     st.dataframe(final_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No data available for selected outlet")
