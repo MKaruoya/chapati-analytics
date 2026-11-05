@@ -61,16 +61,6 @@ def calculate_monthly_metrics(branch_row, numeric_cols):
 def get_month_from_week(week_num):
     """Convert ISO week number (2026) to month number (1-8 for March-October)"""
     
-    # Week mapping for 2026
-    # March (M1) = weeks 10-14
-    # April (M2) = weeks 15-18
-    # May (M3) = weeks 19-22
-    # June (M4) = weeks 23-27
-    # July (M5) = weeks 28-31
-    # August (M6) = weeks 32-36
-    # September (M7) = weeks 37-40
-    # October (M8) = weeks 41-44
-    
     week_to_month = {
         10: 1, 11: 1, 12: 1, 13: 1, 14: 1,      # March = M1
         15: 2, 16: 2, 17: 2, 18: 2,              # April = M2
@@ -147,6 +137,7 @@ def get_monthly_summary_from_weekly(weekly_df, branch_name):
         })
     
     return pd.DataFrame(monthly_summary)
+
 def calculate_volatility(values):
     """Calculate volatility (standard deviation) of values"""
     if len(values) < 2:
@@ -176,3 +167,91 @@ def calculate_quarter_trend(monthly_df):
         return "Rising"
     else:
         return "Stable"
+
+def get_active_periods(branch_row, numeric_cols):
+    """Get months with active data"""
+    active_months = []
+    
+    month_map = {
+        'M1': 1, 'M2': 2, 'M3': 3, 'M4': 4,
+        'M5': 5, 'M6': 6, 'M7': 7, 'M8': 8
+    }
+    
+    for month_label, month_num in month_map.items():
+        sales_col = f'{month_label}_Sales'
+        returns_col = f'{month_label}_Returns'
+        
+        if sales_col in branch_row.columns and returns_col in branch_row.columns:
+            sales = float(branch_row[sales_col].values[0]) if sales_col in branch_row.columns else 0
+            returns = float(branch_row[returns_col].values[0]) if returns_col in branch_row.columns else 0
+            
+            if sales > 0 or returns > 0:
+                active_months.append(month_num)
+    
+    return active_months
+
+def get_top_performers(df, metric='return_rate', n=5):
+    """Get top performing branches"""
+    metrics_list = []
+    
+    for _, branch_row in df.iterrows():
+        branch_name = branch_row['Branch']
+        numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
+        monthly_data = calculate_monthly_metrics(branch_row, numeric_cols)
+        monthly_df = pd.DataFrame(monthly_data)
+        monthly_df = monthly_df[monthly_df['has_data'] == True]
+        
+        if len(monthly_df) > 0:
+            if metric == 'return_rate':
+                score = monthly_df['return_rate'].mean()
+            else:
+                score = monthly_df['sales'].sum()
+            
+            metrics_list.append({
+                'branch': branch_name,
+                'score': score,
+                'avg_return_rate': monthly_df['return_rate'].mean(),
+                'total_sales': monthly_df['sales'].sum()
+            })
+    
+    metrics_df = pd.DataFrame(metrics_list)
+    
+    if metric == 'return_rate':
+        # Lower return rate is better
+        return metrics_df.nsmallest(n, 'score')
+    else:
+        # Higher sales is better
+        return metrics_df.nlargest(n, 'score')
+
+def get_bottom_performers(df, metric='return_rate', n=5):
+    """Get bottom performing branches"""
+    metrics_list = []
+    
+    for _, branch_row in df.iterrows():
+        branch_name = branch_row['Branch']
+        numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
+        monthly_data = calculate_monthly_metrics(branch_row, numeric_cols)
+        monthly_df = pd.DataFrame(monthly_data)
+        monthly_df = monthly_df[monthly_df['has_data'] == True]
+        
+        if len(monthly_df) > 0:
+            if metric == 'return_rate':
+                score = monthly_df['return_rate'].mean()
+            else:
+                score = monthly_df['sales'].sum()
+            
+            metrics_list.append({
+                'branch': branch_name,
+                'score': score,
+                'avg_return_rate': monthly_df['return_rate'].mean(),
+                'total_sales': monthly_df['sales'].sum()
+            })
+    
+    metrics_df = pd.DataFrame(metrics_list)
+    
+    if metric == 'return_rate':
+        # Higher return rate is worse
+        return metrics_df.nlargest(n, 'score')
+    else:
+        # Lower sales is worse
+        return metrics_df.nsmallest(n, 'score')
