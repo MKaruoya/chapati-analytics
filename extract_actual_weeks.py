@@ -4,7 +4,7 @@ import numpy as np
 # Read raw with multi-level headers
 df_raw = pd.read_csv('data/october_dataset.csv', header=[0, 1, 2])
 
-print("Extracting actual weekly data (Sales and Returns separated)...\n")
+print("Extracting actual weekly data (with reversal consolidation)...\n")
 
 # Month map
 month_map = {
@@ -55,11 +55,33 @@ for branch_idx, (_, branch_row) in enumerate(df_raw.iterrows()):
         
         # Read weeks for this month
         # Pattern: Sales (odd), Adjustment (even), Sales (odd), Adjustment (even), ...
+        pending_sales = None
+        pending_returns = None
+        
         while col_idx < len(branch_row):
             col_header = str(df_raw.columns[col_idx])
             
             # Stop at totals or next month
             if 'Sum of' in col_header:
+                # Flush any pending data
+                if pending_sales is not None:
+                    if pending_sales != 0 or pending_returns != 0:
+                        order_qty = pending_sales + pending_returns
+                        return_rate = (pending_returns / order_qty * 100) if order_qty > 0 else 0
+                        
+                        weekly_records.append({
+                            'Branch': branch_name,
+                            'Month': month_num,
+                            'Week': week_counter,
+                            'Sales': int(pending_sales),
+                            'Returns': int(pending_returns),
+                            'Return Rate': round(return_rate, 1)
+                        })
+                        week_counter += 1
+                    
+                    pending_sales = None
+                    pending_returns = None
+                
                 col_idx += 2
                 break
             
@@ -76,29 +98,37 @@ for branch_idx, (_, branch_row) in enumerate(df_raw.iterrows()):
             sales_val = branch_row.iloc[col_idx]
             col_idx += 1
             
-            # Get Returns/Adjustment value (next column)
-            returns_val = None
+            # Get Adjustment value (next column)
+            adjustment_val = None
             if col_idx < len(branch_row):
-                returns_val = branch_row.iloc[col_idx]
+                adjustment_val = branch_row.iloc[col_idx]
                 col_idx += 1
             
             # Process values
             try:
                 sales = float(sales_val) if pd.notna(sales_val) else 0
-                returns = float(returns_val) if pd.notna(returns_val) else 0
+                adjustment = float(adjustment_val) if pd.notna(adjustment_val) else 0
+                
+                # If sales is negative, it's a reversal of previous returns
+                if sales < 0:
+                    # This is a reversal - skip it
+                    continue
+                
+                # The adjustment is negative returns
+                returns = abs(adjustment)
                 
                 # Only record if at least one value is non-zero
                 if sales != 0 or returns != 0:
-                    # Returns should be positive, so if negative, it's an adjustment
-                    if returns < 0:
-                        returns = abs(returns)
+                    order_qty = sales + returns
+                    return_rate = (returns / order_qty * 100) if order_qty > 0 else 0
                     
                     weekly_records.append({
                         'Branch': branch_name,
                         'Month': month_num,
                         'Week': week_counter,
                         'Sales': int(sales),
-                        'Returns': int(returns)
+                        'Returns': int(returns),
+                        'Return Rate': round(return_rate, 1)
                     })
                     week_counter += 1
             except:
@@ -109,16 +139,24 @@ print(f"Extracted {len(weekly_records)} weekly records\n")
 if weekly_records:
     weekly_df = pd.DataFrame(weekly_records)
     
-    # Calculate return rate
-    weekly_df['Return Rate'] = (weekly_df['Returns'] / (weekly_df['Sales'] + weekly_df['Returns']) * 100).round(1)
-    weekly_df.loc[weekly_df['Sales'] + weekly_df['Returns'] == 0, 'Return Rate'] = 0
-    
     print("Sample data:")
     print(weekly_df.head(50))
     
-    print("\n\nSample for one branch (first 20 weeks):")
-    sample_branch = weekly_df[weekly_df['Branch'] == weekly_df.iloc[0]['Branch']].head(20)
-    print(sample_branch)
+    print("\n\nSample for CASH SALES - SPECIAL-THIKA BRANCH:")
+    sample_branch = weekly_df[weekly_df['Branch'] == 'CASH SALES - SPECIAL-THIKA BRANCH']
+    print(sample_branch.to_string())
+    
+    # Verify against monthly totals
+    print("\n\nVerification - comparing weekly totals to monthly:")
+    for branch in weekly_df['Branch'].unique()[:5]:
+        branch_weekly = weekly_df[weekly_df['Branch'] == branch]
+        for month in sorted(branch_weekly['Month'].unique()):
+            month_data = branch_weekly[branch_weekly['Month'] == month]
+            weekly_sales = month_data['Sales'].sum()
+            weekly_returns = month_data['Returns'].sum()
+            order = weekly_sales + weekly_returns
+            return_rate = (weekly_returns / order * 100) if order > 0 else 0
+            print(f"{branch} M{int(month)}: Sales={weekly_sales}, Returns={weekly_returns}, Return Rate={return_rate:.1f}%")
     
     # Save
     weekly_df.to_csv('data/october_weekly_actual.csv', index=False)
