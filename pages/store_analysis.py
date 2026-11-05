@@ -243,8 +243,12 @@ def show():
     </div>
     """, unsafe_allow_html=True)
     
-    # Detailed Data
-    with st.expander("View Detailed Monthly Data"):
+    # Detailed Data Tabs
+    tab1, tab2 = st.tabs(["Monthly Data", "Weekly Breakdown"])
+    
+    with tab1:
+        st.subheader("Detailed Monthly Data")
+        
         display_monthly = monthly_df.copy()
         display_monthly['Month'] = display_monthly['month_num'].apply(lambda x: f"M{int(x)}")
         display_monthly['Sales'] = display_monthly['sales'].apply(lambda x: f"{x:.0f}")
@@ -253,3 +257,66 @@ def show():
         
         final_display = display_monthly[['Month', 'Sales', 'Returns', 'Return Rate']]
         st.dataframe(final_display, use_container_width=True, hide_index=True)
+    
+    with tab2:
+        st.subheader("Weekly Breakdown")
+        st.caption("Estimated weekly distribution (assuming 5 weeks per month)")
+        
+        # Create weekly data by distributing monthly data
+        weekly_data = []
+        week_counter = 1
+        
+        for _, month_row in monthly_df.iterrows():
+            month_num = int(month_row['month_num'])
+            monthly_sales = month_row['sales']
+            monthly_returns = month_row['returns']
+            
+            # Distribute evenly across 5 weeks
+            weekly_sales = monthly_sales / 5
+            weekly_returns = monthly_returns / 5
+            
+            for week_in_month in range(1, 6):
+                weekly_return_rate = (weekly_returns / weekly_sales * 100) if weekly_sales > 0 else 0
+                
+                weekly_data.append({
+                    'Week': week_counter,
+                    'Month': f"M{month_num}",
+                    'Sales': weekly_sales,
+                    'Returns': weekly_returns,
+                    'Return Rate': weekly_return_rate
+                })
+                week_counter += 1
+        
+        weekly_df = pd.DataFrame(weekly_data)
+        
+        # Display weekly chart
+        fig3 = go.Figure()
+        
+        fig3.add_trace(go.Scatter(
+            x=weekly_df['Week'],
+            y=weekly_df['Return Rate'],
+            mode='lines+markers',
+            name='Weekly Return Rate',
+            line=dict(color='#9b59b6', width=2),
+            marker=dict(size=6)
+        ))
+        
+        fig3.update_layout(
+            title="Weekly Return Rate Trend",
+            xaxis_title="Week",
+            yaxis_title="Return Rate (%)",
+            hovermode='x unified',
+            height=400,
+            font=dict(size=11),
+            showlegend=False
+        )
+        
+        st.plotly_chart(fig3, use_container_width=True)
+        
+        # Weekly data table
+        display_weekly = weekly_df.copy()
+        display_weekly['Sales'] = display_weekly['Sales'].apply(lambda x: f"{x:.0f}")
+        display_weekly['Returns'] = display_weekly['Returns'].apply(lambda x: f"{x:.0f}")
+        display_weekly['Return Rate'] = display_weekly['Return Rate'].apply(lambda x: f"{x:.1f}%")
+        
+        st.dataframe(display_weekly, use_container_width=True, hide_index=True)
