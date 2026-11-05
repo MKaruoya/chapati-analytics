@@ -120,34 +120,36 @@ def find_optimal_quantity(weekly_data):
     return optimal_qty, optimal_return_rate, corr, best_quartile[0], confidence
 
 def calculate_monthly_metrics(branch_row, numeric_cols):
+    """
+    Calculate monthly metrics from transformed October data.
+    Columns are named: M1_Returns, M1_Sales, M2_Returns, M2_Sales, etc.
+    """
     monthly_data = []
-    weeks_per_month = 5
     
-    # Now calculate for 10 months (March to October)
+    # For October transformed data: columns are M1_Returns, M1_Sales, M2_Returns, M2_Sales, etc.
     for month_num in range(1, 9):  # 8 months: March to October
-
-        start_week = (month_num - 1) * weeks_per_month
-        end_week = month_num * weeks_per_month
+        # Look for columns like M1_Returns and M1_Sales
+        returns_col = f'M{month_num}_Returns'
+        sales_col = f'M{month_num}_Sales'
         
-        month_sales = 0
         month_returns = 0
+        month_sales = 0
         has_data = False
         
-        for i in range(start_week * 2, min(end_week * 2, len(numeric_cols)), 2):
-            if i < len(numeric_cols) - 1:
-                net_sales_val = pd.to_numeric(branch_row[numeric_cols[i]].values[0], errors='coerce')
-                returns_val = pd.to_numeric(branch_row[numeric_cols[i + 1]].values[0], errors='coerce')
+        # Check if these columns exist in numeric_cols
+        if returns_col in numeric_cols and sales_col in numeric_cols:
+            try:
+                month_returns = pd.to_numeric(branch_row[returns_col].values[0], errors='coerce')
+                month_sales = pd.to_numeric(branch_row[sales_col].values[0], errors='coerce')
                 
-                if pd.notna(net_sales_val) or pd.notna(returns_val):
-                    net_sales_val = net_sales_val if pd.notna(net_sales_val) else 0
-                    returns_val = returns_val if pd.notna(returns_val) else 0
-                    
-                    month_sales += net_sales_val
-                    month_returns += returns_val
+                if pd.notna(month_returns) or pd.notna(month_sales):
+                    month_returns = month_returns if pd.notna(month_returns) else 0
+                    month_sales = month_sales if pd.notna(month_sales) else 0
                     has_data = True
+            except:
+                pass
         
         if has_data:
-            # Handle negative sales
             if month_sales < 0:
                 original_order = 0
                 return_rate = 0
@@ -157,7 +159,13 @@ def calculate_monthly_metrics(branch_row, numeric_cols):
         else:
             return_rate = 0
         
-        monthly_data.append({'month_num': month_num, 'sales': month_sales, 'returns': month_returns, 'return_rate': return_rate, 'has_data': has_data})
+        monthly_data.append({
+            'month_num': month_num, 
+            'sales': month_sales, 
+            'returns': month_returns, 
+            'return_rate': return_rate, 
+            'has_data': has_data
+        })
     
     return monthly_data
 
