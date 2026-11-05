@@ -1,7 +1,7 @@
 ﻿import streamlit as st
 import pandas as pd
 import styles
-from pages import upload, dashboard, store_analysis, relationship_analysis, order_recommendations
+from pages import upload, dashboard, store_analysis
 
 st.set_page_config(page_title="Chapati Analytics", layout="wide")
 
@@ -34,11 +34,6 @@ elif page == "Dashboard":
 elif page == "Store Analysis":
     store_analysis.show()
 
-elif page == "Relationship Analysis":
-    relationship_analysis.show()
-
-elif page == "Order Recommendations":
-    order_recommendations.show()
 
 st.sidebar.markdown("---")
 
