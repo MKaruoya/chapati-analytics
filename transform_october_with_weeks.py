@@ -72,8 +72,8 @@ df_monthly = df_monthly[df_monthly['Branch'].str.strip() != '']
 df_monthly = df_monthly.fillna(0)
 df_monthly = df_monthly.reset_index(drop=True)
 
-# Save monthly version
-df_monthly.to_csv('data/october_dataset_transformed.csv', index=False)
+# Save monthly version as Excel
+df_monthly.to_excel('data/october_dataset_transformed.xlsx', index=False)
 print(f"Saved monthly data: {df_monthly.shape}")
 print(f"Monthly columns: {df_monthly.columns.tolist()}")
 

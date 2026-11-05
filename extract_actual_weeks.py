@@ -4,7 +4,7 @@ import numpy as np
 # Read raw with multi-level headers
 df_raw = pd.read_csv('data/october_dataset.csv', header=[0, 1, 2])
 
-print("Extracting actual weekly data (with reversal consolidation)...\n")
+print("Extracting actual weekly data (corrected interpretation)...\n")
 
 # Month map
 month_map = {
@@ -55,33 +55,12 @@ for branch_idx, (_, branch_row) in enumerate(df_raw.iterrows()):
         
         # Read weeks for this month
         # Pattern: Sales (odd), Adjustment (even), Sales (odd), Adjustment (even), ...
-        pending_sales = None
-        pending_returns = None
         
         while col_idx < len(branch_row):
             col_header = str(df_raw.columns[col_idx])
             
             # Stop at totals or next month
             if 'Sum of' in col_header:
-                # Flush any pending data
-                if pending_sales is not None:
-                    if pending_sales != 0 or pending_returns != 0:
-                        order_qty = pending_sales + pending_returns
-                        return_rate = (pending_returns / order_qty * 100) if order_qty > 0 else 0
-                        
-                        weekly_records.append({
-                            'Branch': branch_name,
-                            'Month': month_num,
-                            'Week': week_counter,
-                            'Sales': int(pending_sales),
-                            'Returns': int(pending_returns),
-                            'Return Rate': round(return_rate, 1)
-                        })
-                        week_counter += 1
-                    
-                    pending_sales = None
-                    pending_returns = None
-                
                 col_idx += 2
                 break
             
@@ -109,24 +88,32 @@ for branch_idx, (_, branch_row) in enumerate(df_raw.iterrows()):
                 sales = float(sales_val) if pd.notna(sales_val) else 0
                 adjustment = float(adjustment_val) if pd.notna(adjustment_val) else 0
                 
-                # If sales is negative, it's a reversal of previous returns
-                if sales < 0:
-                    # This is a reversal - skip it
-                    continue
+                # Interpretation:
+                # - Sales column: actual sales (can be negative if returns exceeded sales)
+                # - Adjustment column: negative returns (so abs(adjustment) = returns)
                 
-                # The adjustment is negative returns
-                returns = abs(adjustment)
+                # If sales is negative, it means returns exceeded sales
+                # So: actual_sales = max(0, sales)
+                #     returns = abs(adjustment) + abs(min(0, sales))
+                
+                if sales < 0:
+                    # Negative sales means returns exceeded sales
+                    actual_sales = 0
+                    returns = abs(adjustment) + abs(sales)
+                else:
+                    actual_sales = sales
+                    returns = abs(adjustment)
                 
                 # Only record if at least one value is non-zero
-                if sales != 0 or returns != 0:
-                    order_qty = sales + returns
+                if actual_sales != 0 or returns != 0:
+                    order_qty = actual_sales + returns
                     return_rate = (returns / order_qty * 100) if order_qty > 0 else 0
                     
                     weekly_records.append({
                         'Branch': branch_name,
                         'Month': month_num,
                         'Week': week_counter,
-                        'Sales': int(sales),
+                        'Sales': int(actual_sales),
                         'Returns': int(returns),
                         'Return Rate': round(return_rate, 1)
                     })
@@ -144,7 +131,8 @@ if weekly_records:
     
     print("\n\nSample for CASH SALES - SPECIAL-THIKA BRANCH:")
     sample_branch = weekly_df[weekly_df['Branch'] == 'CASH SALES - SPECIAL-THIKA BRANCH']
-    print(sample_branch.to_string())
+    if len(sample_branch) > 0:
+        print(sample_branch.to_string())
     
     # Verify against monthly totals
     print("\n\nVerification - comparing weekly totals to monthly:")
@@ -157,10 +145,9 @@ if weekly_records:
             order = weekly_sales + weekly_returns
             return_rate = (weekly_returns / order * 100) if order > 0 else 0
             print(f"{branch} M{int(month)}: Sales={weekly_sales}, Returns={weekly_returns}, Return Rate={return_rate:.1f}%")
-    
-    # Save
-    weekly_df.to_csv('data/october_weekly_actual.csv', index=False)
-    print(f"\nSaved to october_weekly_actual.csv")
+          # Save as Excel
+    weekly_df.to_excel('data/october_weekly_actual.xlsx', index=False)
+    print(f"Saved to october_weekly_actual.xlsx")
     print(f"Total records: {len(weekly_df)}")
 else:
     print("No records extracted")
