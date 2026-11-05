@@ -104,9 +104,9 @@ def show():
     
     month_labels = [f"M{int(m)}" for m in monthly_df['month_num']]
     
-    fig = go.Figure()
+    fig_monthly_trend = go.Figure()
     
-    fig.add_trace(go.Scatter(
+    fig_monthly_trend.add_trace(go.Scatter(
         x=month_labels,
         y=monthly_df['return_rate'],
         mode='lines+markers',
@@ -117,7 +117,7 @@ def show():
         fillcolor='rgba(220, 53, 69, 0.1)'
     ))
     
-    fig.update_layout(
+    fig_monthly_trend.update_layout(
         title="Return Rate Trend",
         xaxis_title="Month",
         yaxis_title="Return Rate (%)",
@@ -127,29 +127,29 @@ def show():
         showlegend=False
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig_monthly_trend, use_container_width=True)
     
-    # Sales vs Returns Chart
-    st.subheader("Sales and Returns Comparison")
+    # Monthly Sales vs Returns Chart
+    st.subheader("Monthly Sales and Returns Comparison")
     st.caption("Monthly net sales and returns volume")
     
-    fig2 = go.Figure()
+    fig_monthly_comparison = go.Figure()
     
-    fig2.add_trace(go.Bar(
+    fig_monthly_comparison.add_trace(go.Bar(
         x=month_labels,
         y=monthly_df['sales'],
         name='Net Sales',
         marker_color='#3498db'
     ))
     
-    fig2.add_trace(go.Bar(
+    fig_monthly_comparison.add_trace(go.Bar(
         x=month_labels,
         y=monthly_df['returns'],
         name='Returns',
         marker_color='#e74c3c'
     ))
     
-    fig2.update_layout(
+    fig_monthly_comparison.update_layout(
         title="Monthly Sales and Returns",
         xaxis_title="Month",
         yaxis_title="Volume",
@@ -159,7 +159,7 @@ def show():
         hovermode='x unified'
     )
     
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig_monthly_comparison, use_container_width=True)
     
     # Performance Analysis
     st.subheader("Performance Analysis")
@@ -276,10 +276,10 @@ def show():
             # Add month label
             branch_weekly['Month'] = branch_weekly['Month'].apply(lambda x: f"M{int(x)}")
             
-            # Display chart
-            fig3 = go.Figure()
+            # Weekly Return Rate Trend Chart
+            fig_weekly_trend = go.Figure()
             
-            fig3.add_trace(go.Scatter(
+            fig_weekly_trend.add_trace(go.Scatter(
                 x=branch_weekly['Week'],
                 y=branch_weekly['Return Rate'],
                 mode='lines+markers',
@@ -288,7 +288,7 @@ def show():
                 marker=dict(size=6)
             ))
             
-            fig3.update_layout(
+            fig_weekly_trend.update_layout(
                 title="Weekly Return Rate Trend",
                 xaxis_title="Week",
                 yaxis_title="Return Rate (%)",
@@ -298,7 +298,36 @@ def show():
                 showlegend=False
             )
             
-            st.plotly_chart(fig3, use_container_width=True)
+            st.plotly_chart(fig_weekly_trend, use_container_width=True)
+            
+            # Weekly Sales vs Returns Chart
+            fig_weekly_comparison = go.Figure()
+            
+            fig_weekly_comparison.add_trace(go.Bar(
+                x=branch_weekly['Week'],
+                y=branch_weekly['Sales'],
+                name='Sales',
+                marker_color='#3498db'
+            ))
+            
+            fig_weekly_comparison.add_trace(go.Bar(
+                x=branch_weekly['Week'],
+                y=branch_weekly['Returns'],
+                name='Returns',
+                marker_color='#e74c3c'
+            ))
+            
+            fig_weekly_comparison.update_layout(
+                title="Weekly Sales and Returns",
+                xaxis_title="Week",
+                yaxis_title="Volume",
+                barmode='group',
+                height=400,
+                font=dict(size=11),
+                hovermode='x unified'
+            )
+            
+            st.plotly_chart(fig_weekly_comparison, use_container_width=True)
             
             # Weekly data table
             display_weekly = branch_weekly[['Week', 'Month', 'Sales', 'Returns', 'Return Rate']].copy()
