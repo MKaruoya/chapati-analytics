@@ -30,9 +30,9 @@ def get_trend(overall_trend):
     if overall_trend_str == "N/A" or overall_trend_str == "nan":
         return "Stable"
     if "Improving" in overall_trend_str:
-        return "Improving"
+        return "Declining"
     elif "Worsening" in overall_trend_str:
-        return "Worsening"
+        return "Rising"
     else:
         return "Stable"
 
@@ -41,13 +41,13 @@ def get_action(status, trend):
     if status == "CRITICAL":
         return "Urgent - Negative sales, stop orders"
     elif status == "HIGH":
-        return "Urgent - Review order quantities" if trend == "Worsening" else "Monitor closely"
+        return "Urgent - Review order quantities" if trend == "Rising" else "Monitor closely"
     elif status == "MODERATE":
-        return "Investigate - Returns increasing" if trend == "Worsening" else "Monitor"
+        return "Investigate - Returns increasing" if trend == "Rising" else "Monitor"
     elif status == "WATCH":
-        return "Review order pattern" if trend == "Worsening" else "Monitor"
+        return "Review order pattern" if trend == "Rising" else "Monitor"
     else:  # GOOD
-        return "Maintain current pattern" if trend == "Improving" else "Monitor"
+        return "Maintain current pattern" if trend == "Declining" else "Monitor"
 
 def get_status_for_return_rate(return_rate):
     """Determine status based on return rate"""
@@ -63,16 +63,17 @@ def get_status_for_return_rate(return_rate):
         return "GOOD"
 
 def show():
-    st.header("Dashboard - October Analytics")
+    st.header("Branch Performance Dashboard")
+    st.caption("October Analytics - Return Rate Analysis")
     
     # Check if data is loaded
     if st.session_state.data is None:
-        st.warning("⚠️ Please upload data first from the 'Upload Data' page")
+        st.warning("Please upload data first from the Data Upload page")
         return
     
     df = st.session_state.data.copy()
     
-    # Extract valid branches (must have '-' and not be CHAPATI)
+    # Extract valid branches
     all_names = df['Branch'].dropna().unique()
     valid_branches = [
         name for name in all_names 
@@ -80,7 +81,7 @@ def show():
     ]
     
     if not valid_branches:
-        st.error("❌ No valid branches found in data")
+        st.error("No valid branches found in data")
         return
     
     # Extract outlet names
@@ -90,7 +91,7 @@ def show():
     ]))
     
     if not outlet_names:
-        st.error("❌ No outlets found")
+        st.error("No outlets found")
         return
     
     # Outlet selector
@@ -108,7 +109,7 @@ def show():
     ]
     
     if not outlet_branches:
-        st.error(f"❌ No branches found for {selected_outlet}")
+        st.error(f"No branches found for {selected_outlet}")
         return
     
     # Get numeric columns
@@ -118,7 +119,7 @@ def show():
     ]
     
     if not numeric_cols:
-        st.error("❌ No numeric columns found")
+        st.error("No numeric columns found")
         return
     
     # Calculate metrics for all branches
@@ -138,7 +139,7 @@ def show():
             if not active_periods:
                 continue
             
-            # Get current month data (use last active month if M8 is empty)
+            # Get current month data (use last active month)
             current_month = None
             for i in range(len(monthly_data) - 1, -1, -1):
                 if monthly_data[i]['has_data']:
@@ -183,18 +184,17 @@ def show():
                 'Total Sales': total_sales
             })
         except Exception as e:
-            st.warning(f"Error processing {branch}: {str(e)}")
             continue
     
     if not branch_metrics:
-        st.info("ℹ️ No data available for selected outlet")
+        st.info("No data available for selected outlet")
         return
     
     # Create metrics dataframe
     metrics_df = pd.DataFrame(branch_metrics)
     
     # Display overview metrics
-    st.subheader("📊 Overview")
+    st.subheader("Performance Summary")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -202,19 +202,19 @@ def show():
     
     with col2:
         avg_return = metrics_df['Return Rate'].mean()
-        st.metric("Avg Return Rate", f"{avg_return:.1f}%")
+        st.metric("Average Return Rate", f"{avg_return:.1f}%")
     
     with col3:
         critical_count = len(metrics_df[metrics_df['Status'].isin(['CRITICAL', 'HIGH'])])
-        st.metric("Critical Issues", critical_count)
+        st.metric("High Risk Branches", critical_count)
     
     with col4:
-        improving_count = len(metrics_df[metrics_df['Overall Trend'] == 'Improving'])
-        st.metric("Improving", improving_count)
+        declining_count = len(metrics_df[metrics_df['Overall Trend'] == 'Improving'])
+        st.metric("Declining Returns", declining_count)
     
     # Branch Performance Chart
-    st.subheader("📈 Branch Performance")
-    st.caption("Return Rate by Branch (Color: Red=High Risk, Orange=Moderate, Yellow=Watch, Green=Good)")
+    st.subheader("October Return Rate by Branch")
+    st.caption("Sorted by return rate (highest to lowest)")
     
     sorted_df = metrics_df.sort_values('Return Rate', ascending=False)
     colors = [get_status_color(status) for status in sorted_df['Status']]
@@ -230,7 +230,7 @@ def show():
     ))
     
     fig.update_layout(
-        title="Return Rate by Branch",
+        title="October Return Rate Analysis",
         height=500,
         xaxis_tickangle=-45,
         showlegend=False,
@@ -242,44 +242,47 @@ def show():
     st.plotly_chart(fig, use_container_width=True)
     
     # Trend Analysis
-    st.subheader("📉 Trend Analysis")
-    st.caption("Comparison of early period (M1-M3) vs recent period (M6-M8)")
+    st.subheader("Return Rate Trends")
+    st.caption("Comparison of early period (March-May) vs recent period (June-October)")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        improving = len(metrics_df[metrics_df['Overall Trend'] == 'Improving'])
-        st.metric("Improving ↓", improving, delta=f"+{improving}")
+        declining = len(metrics_df[metrics_df['Overall Trend'] == 'Improving'])
+        st.metric("Declining", declining)
+        st.caption("Return rates decreasing")
     
     with col2:
         stable = len(metrics_df[metrics_df['Overall Trend'] == 'Stable'])
-        st.metric("Stable →", stable)
+        st.metric("Stable", stable)
+        st.caption("Return rates unchanged")
     
     with col3:
-        worsening = len(metrics_df[metrics_df['Overall Trend'] == 'Worsening'])
-        st.metric("Worsening ↑", worsening, delta=f"-{worsening}")
+        rising = len(metrics_df[metrics_df['Overall Trend'] == 'Worsening'])
+        st.metric("Rising", rising)
+        st.caption("Return rates increasing")
     
     # Status Legend
-    st.subheader("🎯 Status Legend")
+    st.subheader("Status Classification")
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        st.markdown("<span style='color: #dc3545; font-weight: bold;'>🔴 CRITICAL</span> - Negative sales", unsafe_allow_html=True)
+        st.markdown("<span style='color: #dc3545; font-weight: bold;'>CRITICAL</span><br>Negative sales", unsafe_allow_html=True)
     
     with col2:
-        st.markdown("<span style='color: #fd7e14; font-weight: bold;'>🟠 HIGH</span> - Return rate > 30%", unsafe_allow_html=True)
+        st.markdown("<span style='color: #fd7e14; font-weight: bold;'>HIGH</span><br>Return rate > 30%", unsafe_allow_html=True)
     
     with col3:
-        st.markdown("<span style='color: #ffc107; font-weight: bold;'>🟡 MODERATE</span> - Return rate 20-30%", unsafe_allow_html=True)
+        st.markdown("<span style='color: #ffc107; font-weight: bold;'>MODERATE</span><br>Return rate 20-30%", unsafe_allow_html=True)
     
     with col4:
-        st.markdown("<span style='color: #ffc107; font-weight: bold;'>🟡 WATCH</span> - Return rate 15-20%", unsafe_allow_html=True)
+        st.markdown("<span style='color: #ffc107; font-weight: bold;'>WATCH</span><br>Return rate 15-20%", unsafe_allow_html=True)
     
     with col5:
-        st.markdown("<span style='color: #28a745; font-weight: bold;'>🟢 GOOD</span> - Return rate < 15%", unsafe_allow_html=True)
+        st.markdown("<span style='color: #28a745; font-weight: bold;'>GOOD</span><br>Return rate < 15%", unsafe_allow_html=True)
     
     # Detailed Data Table
-    with st.expander("📋 View All Branches - Detailed Data"):
+    with st.expander("View Detailed Branch Data"):
         display_df = metrics_df.copy()
         display_df['Trend'] = display_df['Overall Trend'].apply(get_trend)
         display_df['Action'] = display_df.apply(lambda row: get_action(row['Status'], row['Trend']), axis=1)
