@@ -40,7 +40,8 @@ def show():
                         if 'Sum of' in str(col):
                             data_cols.append(i)
                     
-                    df_clean = df_raw.iloc[:, [0] + data_cols].copy()
+              
+                                         df_clean = df_raw.iloc[:, [0] + data_cols].copy()
                     
                     # Flatten columns
                     new_columns = ['Branch']
@@ -63,9 +64,19 @@ def show():
                                 new_columns.append(f'M{month_num}_Returns')
                             elif 'Sales' in col_str:
                                 new_columns.append(f'M{month_num}_Sales')
+                        else:
+                            # Keep columns that don't match pattern (like Total columns)
+                            new_columns.append(f'Other_{len(new_columns)}')
+                    
+                    # Ensure column count matches
+                    if len(new_columns) != len(df_clean.columns):
+                        new_columns = new_columns[:len(df_clean.columns)]
                     
                     df_clean.columns = new_columns
-                    df_clean = df_clean.iloc[:, :-2]
+                    
+                    # Remove Total columns (last 2)
+                    cols_to_keep = [c for c in df_clean.columns if not c.startswith('Other_')]
+                    df_clean = df_clean[cols_to_keep]
                     
                     # Filter branches
                     df_clean['Branch'] = df_clean['Branch'].astype(str)
