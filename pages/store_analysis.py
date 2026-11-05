@@ -2,7 +2,7 @@
 import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
-from utils import calculate_monthly_metrics, extract_outlet_name
+from utils import calculate_monthly_metrics, extract_outlet_name, add_month_to_weekly_data, get_store_weekly_data
 
 def show():
     st.header("Individual Branch Analysis")
@@ -17,9 +17,9 @@ def show():
     # Load weekly data
     try:
         weekly_df = pd.read_csv('data/october_weekly_actual.csv')
+        weekly_df = add_month_to_weekly_data(weekly_df)
     except:
-        st.error("Weekly data file not found. Please run extract_actual_weeks.py first.")
-        return
+        weekly_df = None
     
     # Get all valid branches
     all_names = df['Branch'].dropna().unique()
@@ -267,70 +267,76 @@ def show():
         st.subheader("Weekly Data")
         st.caption("Actual weekly sales and returns")
         
-        # Get weekly data for this branch
-        branch_weekly = weekly_df[weekly_df['Branch'] == selected_branch].copy()
-        
-        if len(branch_weekly) == 0:
-            st.info("No weekly data available for this branch")
+        if weekly_df is None or len(weekly_df) == 0:
+            st.info("No weekly data available")
         else:
-            # Add month label
-            branch_weekly['Month'] = branch_weekly['Month'].apply(lambda x: f"M{int(x)}")
+            # Get weekly data for this branch
+            branch_weekly = get_store_weekly_data(weekly_df, selected_branch)
             
-            # Weekly Return Rate Trend Chart
-            fig_weekly_trend = go.Figure()
-            
-            fig_weekly_trend.add_trace(go.Scatter(
-                x=branch_weekly['Week'],
-                y=branch_weekly['Return Rate'],
-                mode='lines+markers',
-                name='Return Rate',
-                line=dict(color='#9b59b6', width=2),
-                marker=dict(size=6)
-            ))
-            
-            fig_weekly_trend.update_layout(
-                title="Weekly Return Rate Trend",
-                xaxis_title="Week",
-                yaxis_title="Return Rate (%)",
-                hovermode='x unified',
-                height=400,
-                font=dict(size=11),
-                showlegend=False
-            )
-            
-            st.plotly_chart(fig_weekly_trend, use_container_width=True)
-            
-            # Weekly Sales vs Returns Chart
-            fig_weekly_comparison = go.Figure()
-            
-            fig_weekly_comparison.add_trace(go.Bar(
-                x=branch_weekly['Week'],
-                y=branch_weekly['Sales'],
-                name='Sales',
-                marker_color='#3498db'
-            ))
-            
-            fig_weekly_comparison.add_trace(go.Bar(
-                x=branch_weekly['Week'],
-                y=branch_weekly['Returns'],
-                name='Returns',
-                marker_color='#e74c3c'
-            ))
-            
-            fig_weekly_comparison.update_layout(
-                title="Weekly Sales and Returns",
-                xaxis_title="Week",
-                yaxis_title="Volume",
-                barmode='group',
-                height=400,
-                font=dict(size=11),
-                hovermode='x unified'
-            )
-            
-            st.plotly_chart(fig_weekly_comparison, use_container_width=True)
-            
-            # Weekly data table
-            display_weekly = branch_weekly[['Week', 'Month', 'Sales', 'Returns', 'Return Rate']].copy()
-            display_weekly['Return Rate'] = display_weekly['Return Rate'].apply(lambda x: f"{x:.1f}%")
-            
-            st.dataframe(display_weekly, use_container_width=True, hide_index=True)
+            if branch_weekly is None or len(branch_weekly) == 0:
+                st.info("No weekly data available for this branch")
+            else:
+                # Add month label
+                branch_weekly['Month Label'] = branch_weekly['Month'].apply(lambda x: f"M{int(x)}" if pd.notna(x) else "Unknown")
+                
+                # Weekly Return Rate Trend Chart
+                fig_weekly_trend = go.Figure()
+                
+                fig_weekly_trend.add_trace(go.Scatter(
+                    x=branch_weekly['Week'],
+                    y=branch_weekly['Return Rate'],
+                    mode='lines+markers',
+                    name='Return Rate',
+                    line=dict(color='#9b59b6', width=2),
+                    marker=dict(size=6)
+                ))
+                
+                fig_weekly_trend.update_layout(
+                    title="Weekly Return Rate Trend",
+                    xaxis_title="Week",
+                    yaxis_title="Return Rate (%)",
+                    hovermode='x unified',
+                    height=400,
+                    font=dict(size=11),
+                    showlegend=False
+                )
+                
+                st.plotly_chart(fig_weekly_trend, use_container_width=True)
+                
+                # Weekly Sales vs Returns Chart
+                fig_weekly_comparison = go.Figure()
+                
+                fig_weekly_comparison.add_trace(go.Bar(
+                    x=branch_weekly['Week'],
+                    y=branch_weekly['Sales'],
+                    name='Sales',
+                    marker_color='#3498db'
+                ))
+                
+                fig_weekly_comparison.add_trace(go.Bar(
+                    x=branch_weekly['Week'],
+                    y=branch_weekly['Returns'],
+                    name='Returns',
+                    marker_color='#e74c3c'
+                ))
+                
+                fig_weekly_comparison.update_layout(
+                    title="Weekly Sales and Returns",
+                    xaxis_title="Week",
+                    yaxis_title="Volume",
+                    barmode='group',
+                    height=400,
+                    font=dict(size=11),
+                    hovermode='x unified'
+                )
+                
+                st.plotly_chart(fig_weekly_comparison, use_container_width=True)
+                
+                # Weekly data table
+                display_weekly = branch_weekly[['Week', 'Month Label', 'Sales', 'Returns', 'Return Rate']].copy()
+                display_weekly.columns = ['Week', 'Month', 'Sales', 'Returns', 'Return Rate']
+                display_weekly['Return Rate'] = display_weekly['Return Rate'].apply(lambda x: f"{x:.1f}%")
+                
+                st.dataframe(display_weekly, use_container_width=True, hide_index=True)
+                
+                st.info("Note: Weekly data is based on uploaded data. Ensure data accuracy before making decisions.")
