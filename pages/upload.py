@@ -1,5 +1,6 @@
 ﻿import streamlit as st
 import pandas as pd
+import os
 
 def show():
     st.header("Data Upload")
@@ -10,7 +11,16 @@ def show():
     
     if st.button("📊 Load October Dataset", use_container_width=True):
         try:
-            df = pd.read_csv('data/october_dataset_with_gross.csv')
+            file_path = os.path.join('data', 'october_dataset_with_gross.csv')
+            
+            if not os.path.exists(file_path):
+                st.error(f"File not found: {file_path}")
+                st.info("Available files in data folder:")
+                if os.path.exists('data'):
+                    st.write(os.listdir('data'))
+                return
+            
+            df = pd.read_csv(file_path)
             st.session_state.data = df
             st.success("✅ October dataset loaded!")
             
