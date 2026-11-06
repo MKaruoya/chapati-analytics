@@ -125,21 +125,21 @@ def show():
         
         oct_return_rate = (oct_returns / oct_gross * 100)
         
-        # Get trend by comparing early months vs mid months (from full dataset)
+        # Get trend by comparing first 4 months vs last 4 months (from full dataset)
         branch_all = df[df['Branch'] == branch]
         
-        # Early months: March, April, May (Months 1-3)
-        early_months = branch_all[branch_all['Month'].isin([1, 2, 3])]
-        # Mid months: June, July, August (Months 4-6)
-        mid_months = branch_all[branch_all['Month'].isin([4, 5, 6])]
+        # First 4 months: March, April, May, June (Months 1-4)
+        first_four = branch_all[branch_all['Month'].isin([1, 2, 3, 4])]
+        # Last 4 months: July, August, September, October (Months 5-8)
+        last_four = branch_all[branch_all['Month'].isin([5, 6, 7, 8])]
         
-        if len(early_months) > 0 and len(mid_months) > 0:
-            early_rate = early_months['Return Rate'].mean()
-            mid_rate = mid_months['Return Rate'].mean()
+        if len(first_four) > 0 and len(last_four) > 0:
+            first_rate = first_four['Return Rate'].mean()
+            last_rate = last_four['Return Rate'].mean()
             
-            if mid_rate < early_rate - 2:
+            if last_rate < first_rate - 2:
                 trend = "Improving"
-            elif mid_rate > early_rate + 2:
+            elif last_rate > first_rate + 2:
                 trend = "Worsening"
             else:
                 trend = "Stable"
@@ -217,7 +217,7 @@ def show():
     
     # Trend Analysis
     st.subheader("Return Rate Trends")
-    st.caption("Comparison of early period (March-May) vs mid period (June-August)")
+    st.caption("Comparison of first 4 months (March-June) vs last 4 months (July-October)")
     
     col1, col2, col3 = st.columns(3)
     
