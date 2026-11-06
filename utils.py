@@ -23,6 +23,10 @@ def calculate_monthly_metrics(branch_row, numeric_cols):
     """Calculate monthly metrics from branch data"""
     metrics = []
     
+    # Handle both Series and DataFrame
+    if isinstance(branch_row, pd.DataFrame):
+        branch_row = branch_row.iloc[0]
+    
     month_map = {
         'M1': 1, 'M2': 2, 'M3': 3, 'M4': 4,
         'M5': 5, 'M6': 6, 'M7': 7, 'M8': 8
@@ -32,9 +36,9 @@ def calculate_monthly_metrics(branch_row, numeric_cols):
         sales_col = f'{month_label}_Sales'
         returns_col = f'{month_label}_Returns'
         
-        if sales_col in branch_row.columns and returns_col in branch_row.columns:
-            sales = float(branch_row[sales_col].values[0]) if sales_col in branch_row.columns else 0
-            returns = float(branch_row[returns_col].values[0]) if returns_col in branch_row.columns else 0
+        if sales_col in branch_row.index and returns_col in branch_row.index:
+            sales = float(branch_row[sales_col]) if sales_col in branch_row.index else 0
+            returns = float(branch_row[returns_col]) if returns_col in branch_row.index else 0
             
             if sales > 0 or returns > 0:
                 order_qty = sales + returns
@@ -170,6 +174,10 @@ def calculate_quarter_trend(monthly_df):
 
 def get_active_periods(branch_row, numeric_cols):
     """Get months with active data"""
+    # Handle both Series and DataFrame
+    if isinstance(branch_row, pd.DataFrame):
+        branch_row = branch_row.iloc[0]
+    
     active_months = []
     
     month_map = {
@@ -181,9 +189,9 @@ def get_active_periods(branch_row, numeric_cols):
         sales_col = f'{month_label}_Sales'
         returns_col = f'{month_label}_Returns'
         
-        if sales_col in branch_row.columns and returns_col in branch_row.columns:
-            sales = float(branch_row[sales_col].values[0]) if sales_col in branch_row.columns else 0
-            returns = float(branch_row[returns_col].values[0]) if returns_col in branch_row.columns else 0
+        if sales_col in branch_row.index and returns_col in branch_row.index:
+            sales = float(branch_row[sales_col])
+            returns = float(branch_row[returns_col])
             
             if sales > 0 or returns > 0:
                 active_months.append(month_num)
