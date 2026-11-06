@@ -2,8 +2,7 @@
 import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
-from utils import calculate_volatility, get_sales_volume_category, extract_outlet_name, calculate_quarter_trend
-from utils import calculate_monthly_metrics, get_active_periods
+from utils import extract_outlet_name
 
 def get_status_color(status):
     """Return color for status badge"""
@@ -16,38 +15,6 @@ def get_status_color(status):
         "DELISTED": "#6c757d"
     }
     return colors.get(status, "#6c757d")
-
-def get_trend(overall_trend):
-    """Convert trend value to readable string"""
-    if overall_trend is None:
-        return "Stable"
-    if isinstance(overall_trend, float) and np.isnan(overall_trend):
-        return "Stable"
-    if pd.isna(overall_trend):
-        return "Stable"
-    
-    overall_trend_str = str(overall_trend).strip()
-    if overall_trend_str == "N/A" or overall_trend_str == "nan":
-        return "Stable"
-    if "Improving" in overall_trend_str:
-        return "Declining"
-    elif "Worsening" in overall_trend_str:
-        return "Rising"
-    else:
-        return "Stable"
-
-def get_action(status, trend):
-    """Get recommended action based on status and trend"""
-    if status == "CRITICAL":
-        return "Urgent - Negative sales, stop orders"
-    elif status == "HIGH":
-        return "Urgent - Review order quantities" if trend == "Rising" else "Monitor closely"
-    elif status == "MODERATE":
-        return "Investigate - Returns increasing" if trend == "Rising" else "Monitor"
-    elif status == "WATCH":
-        return "Review order pattern" if trend == "Rising" else "Monitor"
-    else:  # GOOD
-        return "Maintain current pattern" if trend == "Declining" else "Monitor"
 
 def get_status_for_return_rate(return_rate):
     """Determine status based on return rate"""
@@ -62,36 +29,7 @@ def get_status_for_return_rate(return_rate):
     else:
         return "GOOD"
 
-def calculate_quarter_trend_from_monthly(monthly_data):
-    """Calculate quarter trend from monthly data"""
-    if len(monthly_data) < 2:
-        return 0, 0, "Stable"
-    
-    monthly_df = pd.DataFrame(monthly_data)
-    monthly_df = monthly_df[monthly_df['has_data'] == True]
-    
-    if len(monthly_df) < 2:
-        return 0, 0, "Stable"
-    
-    # Early period (first half)
-    early = monthly_df.head(len(monthly_df) // 2)['return_rate'].mean()
-    
-    # Recent period (second half)
-    recent = monthly_df.tail(len(monthly_df) // 2)['return_rate'].mean()
-    
-    change = recent - early
-    
-    if change < -2:
-        trend = "Improving"
-    elif change > 2:
-        trend = "Worsening"
-    else:
-        trend = "Stable"
-    
-    return early, change, trend
-
 def show():
-       
     # Check if data is loaded
     if st.session_state.data is None:
         st.warning("Please upload data first from the Data Upload page")
@@ -110,7 +48,7 @@ def show():
         st.error("No valid branches found in data")
         return
     
-               # Extract outlet names (major outlets like MAJID, CHANDARANA, etc.)
+    # Extract outlet names (major outlets like MAJID, CHANDARANA, etc.)
     outlet_names = sorted(set([
         b.split('-')[0].strip() for b in valid_branches 
         if '-' in b
@@ -138,76 +76,56 @@ def show():
         st.error(f"No branches found for {selected_outlet}")
         return
     
-    # Get numeric columns
-    numeric_cols = [
-        col for col in df.columns[1:] 
-        if df[col].dtype in ['int64', 'float64']
-    ]
-    
-    if not numeric_cols:
-        st.error("No numeric columns found")
-        return
-    
-    # Calculate metrics for all branches
+    # Calculate metrics for all branches (aggregated across all SKUs and weeks)
     branch_metrics = []
     
     for branch in outlet_branches:
-        try:
-            branch_row = df[df['Branch'] == branch]
-            
-            if len(branch_row) == 0:
-                continue
-            
-            # Calculate monthly data
-            monthly_data = calculate_monthly_metrics(branch_row, numeric_cols)
-            
-                               # Get October (M8) data specifically
-            current_month = None
-            for month_data in monthly_data:
-                if month_data['month_num'] == 8 and month_data['has_data']:
-                    current_month = month_data
-                    break
-            
-            # Skip branches without October data
-            if not current_month:
-                continue
-   
-            # Calculate metrics
-            current_return_rate = float(current_month['return_rate'])
-            current_sales = float(current_month['sales'])
-            
-            last_quarter_avg, quarter_change, quarter_trend = calculate_quarter_trend_from_monthly(monthly_data)
-            
-            total_sales = sum([m['sales'] for m in monthly_data])
-            total_returns = sum([m['returns'] for m in monthly_data])
-            volatility = calculate_volatility([m['return_rate'] for m in monthly_data if m['has_data']])
-            volume_category = get_sales_volume_category(abs(total_sales))
-            
-            # Determine status
-            if current_sales < 0:
-                status = "CRITICAL"
-                priority = 1
-            else:
-                status = get_status_for_return_rate(current_return_rate)
-                priority = {'CRITICAL': 1, 'HIGH': 2, 'MODERATE': 3, 'WATCH': 4, 'GOOD': 5}.get(status, 6)
-            
-            active_status = "Active"
-            
-            branch_metrics.append({
-                'Branch': branch,
-                'Active Status': active_status,
-                'Return Rate': current_return_rate,
-                'Last Quarter Avg': last_quarter_avg,
-                'Quarter Trend': quarter_trend,
-                'Volume Category': volume_category,
-                'Volatility': volatility,
-                'Status': status,
-                'Priority': priority,
-                'Overall Trend': quarter_trend,
-                'Total Sales': total_sales
-            })
-        except Exception as e:
+        branch_data = df[df['Branch'] == branch]
+        
+        if len(branch_data) == 0:
             continue
+        
+        # Aggregate across all SKUs and weeks
+        total_gross = branch_data['Gross Sales'].sum()
+        total_returns = branch_data['Returns'].sum()
+        total_net = branch_data['Net Sales'].sum()
+        
+        if total_gross == 0:
+            continue
+        
+        # Calculate overall return rate
+        overall_return_rate = (total_returns / total_gross * 100)
+        
+        # Get status
+        status = get_status_for_return_rate(overall_return_rate)
+        
+        # Get trend (compare first half vs second half of weeks)
+        weeks = sorted(branch_data['Week'].unique())
+        if len(weeks) > 2:
+            mid = len(weeks) // 2
+            first_half = branch_data[branch_data['Week'].isin(weeks[:mid])]['Return Rate'].mean()
+            second_half = branch_data[branch_data['Week'].isin(weeks[mid:])]['Return Rate'].mean()
+            
+            if second_half < first_half - 2:
+                trend = "Improving"
+            elif second_half > first_half + 2:
+                trend = "Worsening"
+            else:
+                trend = "Stable"
+        else:
+            trend = "Stable"
+        
+        branch_metrics.append({
+            'Branch': branch,
+            'Gross Sales': total_gross,
+            'Returns': total_returns,
+            'Net Sales': total_net,
+            'Return Rate': overall_return_rate,
+            'Status': status,
+            'Trend': trend,
+            'SKUs': branch_data['SKU'].nunique(),
+            'Weeks': len(weeks)
+        })
     
     if not branch_metrics:
         st.info("No data available for selected outlet")
@@ -232,11 +150,11 @@ def show():
         st.metric("High Risk Branches", critical_count)
     
     with col4:
-        declining_count = len(metrics_df[metrics_df['Overall Trend'] == 'Improving'])
-        st.metric("Declining Returns", declining_count)
+        improving_count = len(metrics_df[metrics_df['Trend'] == 'Improving'])
+        st.metric("Improving", improving_count)
     
     # Branch Performance Chart
-    st.subheader("October Return Rate by Branch")
+    st.subheader("Return Rate by Branch")
     st.caption("Sorted by return rate (highest to lowest)")
     
     sorted_df = metrics_df.sort_values('Return Rate', ascending=False)
@@ -253,7 +171,7 @@ def show():
     ))
     
     fig.update_layout(
-        title="October Return Rate Analysis",
+        title="Return Rate Analysis",
         height=500,
         xaxis_tickangle=-45,
         showlegend=False,
@@ -266,23 +184,23 @@ def show():
     
     # Trend Analysis
     st.subheader("Return Rate Trends")
-    st.caption("Comparison of early period (March-May) vs recent period (June-October)")
+    st.caption("Comparison of early weeks vs recent weeks")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        declining = len(metrics_df[metrics_df['Overall Trend'] == 'Improving'])
-        st.metric("Declining", declining)
+        improving = len(metrics_df[metrics_df['Trend'] == 'Improving'])
+        st.metric("Improving", improving)
         st.caption("Return rates decreasing")
     
     with col2:
-        stable = len(metrics_df[metrics_df['Overall Trend'] == 'Stable'])
+        stable = len(metrics_df[metrics_df['Trend'] == 'Stable'])
         st.metric("Stable", stable)
         st.caption("Return rates unchanged")
     
     with col3:
-        rising = len(metrics_df[metrics_df['Overall Trend'] == 'Worsening'])
-        st.metric("Rising", rising)
+        worsening = len(metrics_df[metrics_df['Trend'] == 'Worsening'])
+        st.metric("Worsening", worsening)
         st.caption("Return rates increasing")
     
     # Status Legend
@@ -290,10 +208,10 @@ def show():
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        st.markdown("<span style='color: #dc3545; font-weight: bold;'>CRITICAL</span><br>Negative sales", unsafe_allow_html=True)
+        st.markdown("<span style='color: #dc3545; font-weight: bold;'>CRITICAL</span><br>Return rate > 40%", unsafe_allow_html=True)
     
     with col2:
-        st.markdown("<span style='color: #fd7e14; font-weight: bold;'>HIGH</span><br>Return rate > 30%", unsafe_allow_html=True)
+        st.markdown("<span style='color: #fd7e14; font-weight: bold;'>HIGH</span><br>Return rate 30-40%", unsafe_allow_html=True)
     
     with col3:
         st.markdown("<span style='color: #ffc107; font-weight: bold;'>MODERATE</span><br>Return rate 20-30%", unsafe_allow_html=True)
@@ -307,12 +225,12 @@ def show():
     # Detailed Data Table
     with st.expander("View Detailed Branch Data"):
         display_df = metrics_df.copy()
-        display_df['Trend'] = display_df['Overall Trend'].apply(get_trend)
-        display_df['Action'] = display_df.apply(lambda row: get_action(row['Status'], row['Trend']), axis=1)
         display_df['Branch Name'] = display_df['Branch'].apply(lambda x: x.split('-')[-1].strip() if '-' in x else x)
         
-        final_df = display_df[['Branch Name', 'Return Rate', 'Trend', 'Status', 'Action']].copy()
+        final_df = display_df[['Branch Name', 'Gross Sales', 'Returns', 'Return Rate', 'Trend', 'Status', 'SKUs', 'Weeks']].copy()
+        final_df['Gross Sales'] = final_df['Gross Sales'].apply(lambda x: f"{int(x):,}")
+        final_df['Returns'] = final_df['Returns'].apply(lambda x: f"{int(x):,}")
         final_df['Return Rate'] = final_df['Return Rate'].apply(lambda x: f"{x:.1f}%")
-        final_df = final_df.sort_values('Status', key=lambda x: x.map({'CRITICAL': 0, 'HIGH': 1, 'MODERATE': 2, 'WATCH': 3, 'GOOD': 4}))
+        final_df = final_df.sort_values('Return Rate', ascending=False)
         
         st.dataframe(final_df, use_container_width=True, hide_index=True)
