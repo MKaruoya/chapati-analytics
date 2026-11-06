@@ -115,7 +115,7 @@ def show():
         if len(october_data) == 0:
             continue
         
-        # Aggregate October
+        # Aggregate October (SUM of all weeks)
         oct_gross = october_data['Gross Sales'].sum()
         oct_returns = october_data['Returns'].sum()
         oct_net = october_data['Net Sales'].sum()
@@ -188,7 +188,7 @@ def show():
     
     # Branch Performance Chart
     st.subheader("October Return Rate by Branch")
-    st.caption("Sorted by return rate (highest to lowest)")
+    st.caption("Sorted by return rate (highest to lowest) - Sum of all October weeks")
     
     sorted_df = metrics_df.sort_values('Return Rate', ascending=False)
     colors = [get_status_color(status) for status in sorted_df['Status']]
@@ -204,7 +204,7 @@ def show():
     ))
     
     fig.update_layout(
-        title="October Return Rate Analysis",
+        title="October Return Rate Analysis (Sum of all weeks)",
         height=500,
         xaxis_tickangle=-45,
         showlegend=False,
@@ -256,7 +256,7 @@ def show():
         st.markdown("<span style='color: #28a745; font-weight: bold;'>GOOD</span><br>Return rate < 10%", unsafe_allow_html=True)
     
     # Detailed Data Table
-    with st.expander("View Detailed Branch Data"):
+    with st.expander("View Detailed Branch Data - October Summary"):
         display_df = metrics_df.copy()
         display_df['Branch Name'] = display_df['Branch'].apply(lambda x: x.split('-')[-1].strip() if '-' in x else x)
         
@@ -265,6 +265,9 @@ def show():
         final_df['Returns'] = final_df['Returns'].apply(lambda x: f"{int(x):,}")
         final_df['Net Sales'] = final_df['Net Sales'].apply(lambda x: f"{int(x):,}")
         final_df['Return Rate'] = final_df['Return Rate'].apply(lambda x: f"{x:.1f}%")
+        final_df['Weeks'] = final_df['Weeks'].apply(lambda x: f"{int(x)}/4")
         final_df = final_df.sort_values('Return Rate', ascending=False)
         
         st.dataframe(final_df, use_container_width=True, hide_index=True)
+        
+        st.caption("📊 All figures are sums of available October weeks (Weeks 41-44). 'Weeks' column shows data coverage (e.g., 2/4 means 2 weeks of data available).")
