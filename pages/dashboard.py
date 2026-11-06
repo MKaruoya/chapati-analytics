@@ -2,7 +2,6 @@
 import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
-from utils import extract_outlet_name
 
 def get_status_color(status):
     """Return color for status badge"""
@@ -76,7 +75,7 @@ def show():
         st.error(f"No branches found for {selected_outlet}")
         return
     
-    # Calculate metrics for all branches (aggregated across all SKUs and weeks)
+    # Calculate metrics for all branches (aggregated across all weeks)
     branch_metrics = []
     
     for branch in outlet_branches:
@@ -85,7 +84,7 @@ def show():
         if len(branch_data) == 0:
             continue
         
-        # Aggregate across all SKUs and weeks
+        # Aggregate across all weeks
         total_gross = branch_data['Gross Sales'].sum()
         total_returns = branch_data['Returns'].sum()
         total_net = branch_data['Net Sales'].sum()
@@ -123,7 +122,6 @@ def show():
             'Return Rate': overall_return_rate,
             'Status': status,
             'Trend': trend,
-            'SKUs': branch_data['SKU'].nunique(),
             'Weeks': len(weeks)
         })
     
@@ -208,26 +206,26 @@ def show():
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        st.markdown("<span style='color: #dc3545; font-weight: bold;'>CRITICAL</span><br>Return rate > 40%", unsafe_allow_html=True)
+        st.markdown("<span style='color: #dc3545; font-weight: bold;'>CRITICAL</span><br>Return rate > 30%", unsafe_allow_html=True)
     
     with col2:
-        st.markdown("<span style='color: #fd7e14; font-weight: bold;'>HIGH</span><br>Return rate 30-40%", unsafe_allow_html=True)
+        st.markdown("<span style='color: #fd7e14; font-weight: bold;'>HIGH</span><br>Return rate 20-30%", unsafe_allow_html=True)
     
     with col3:
-        st.markdown("<span style='color: #ffc107; font-weight: bold;'>MODERATE</span><br>Return rate 20-30%", unsafe_allow_html=True)
+        st.markdown("<span style='color: #ffc107; font-weight: bold;'>MODERATE</span><br>Return rate 15-20%", unsafe_allow_html=True)
     
     with col4:
-        st.markdown("<span style='color: #ffc107; font-weight: bold;'>WATCH</span><br>Return rate 15-20%", unsafe_allow_html=True)
+        st.markdown("<span style='color: #ffc107; font-weight: bold;'>WATCH</span><br>Return rate 10-15%", unsafe_allow_html=True)
     
     with col5:
-        st.markdown("<span style='color: #28a745; font-weight: bold;'>GOOD</span><br>Return rate < 15%", unsafe_allow_html=True)
+        st.markdown("<span style='color: #28a745; font-weight: bold;'>GOOD</span><br>Return rate < 10%", unsafe_allow_html=True)
     
     # Detailed Data Table
     with st.expander("View Detailed Branch Data"):
         display_df = metrics_df.copy()
         display_df['Branch Name'] = display_df['Branch'].apply(lambda x: x.split('-')[-1].strip() if '-' in x else x)
         
-        final_df = display_df[['Branch Name', 'Gross Sales', 'Returns', 'Return Rate', 'Trend', 'Status', 'SKUs', 'Weeks']].copy()
+        final_df = display_df[['Branch Name', 'Gross Sales', 'Returns', 'Return Rate', 'Trend', 'Status', 'Weeks']].copy()
         final_df['Gross Sales'] = final_df['Gross Sales'].apply(lambda x: f"{int(x):,}")
         final_df['Returns'] = final_df['Returns'].apply(lambda x: f"{int(x):,}")
         final_df['Return Rate'] = final_df['Return Rate'].apply(lambda x: f"{x:.1f}%")
