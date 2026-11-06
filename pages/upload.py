@@ -11,8 +11,7 @@ def show():
     
     if st.button("📊 Load October Dataset", use_container_width=True):
         try:
-            file_path = os.path.join('data', 'october_dataset_with_gross.csv')
-            
+           file_path = os.path.join('data', 'october_weekly_with_gross.csv')
             if not os.path.exists(file_path):
                 st.error(f"File not found: {file_path}")
                 st.info("Available files in data folder:")
