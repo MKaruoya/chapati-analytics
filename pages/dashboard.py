@@ -91,9 +91,7 @@ def calculate_quarter_trend_from_monthly(monthly_data):
     return early, change, trend
 
 def show():
-    st.header("Branch Performance Dashboard")
-    st.caption("October Analytics - Return Rate Analysis")
-    
+       
     # Check if data is loaded
     if st.session_state.data is None:
         st.warning("Please upload data first from the Data Upload page")
