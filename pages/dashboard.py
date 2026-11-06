@@ -28,6 +28,25 @@ def get_status_for_return_rate(return_rate):
     else:
         return "GOOD"
 
+def get_month_from_week(week):
+    """Convert week number to month (1-8)"""
+    if week <= 14:
+        return 1  # March
+    elif week <= 18:
+        return 2  # April
+    elif week <= 22:
+        return 3  # May
+    elif week <= 27:
+        return 4  # June
+    elif week <= 31:
+        return 5  # July
+    elif week <= 36:
+        return 6  # August
+    elif week <= 40:
+        return 7  # September
+    else:
+        return 8  # October
+
 def show():
     # Check if data is loaded
     if st.session_state.data is None:
@@ -36,16 +55,19 @@ def show():
     
     df = st.session_state.data.copy()
     
-    # Filter for October data only (Weeks 41-44)
-    october_weeks = [41, 42, 43, 44]
-    df = df[df['Week'].isin(october_weeks)].copy()
+    # Add month column
+    df['Month'] = df['Week'].apply(get_month_from_week)
     
-    if len(df) == 0:
+    # Filter for October data only (Weeks 41-44, Month 8)
+    october_weeks = [41, 42, 43, 44]
+    df_october = df[df['Week'].isin(october_weeks)].copy()
+    
+    if len(df_october) == 0:
         st.error("No October data found in dataset")
         return
     
     # Extract valid branches
-    all_names = df['Branch'].dropna().unique()
+    all_names = df_october['Branch'].dropna().unique()
     valid_branches = [
         name for name in all_names 
         if isinstance(name, str) and len(name) > 0
@@ -55,7 +77,7 @@ def show():
         st.error("No valid branches found in October data")
         return
     
-    # Extract outlet names (major outlets like MAJID, CHANDARANA, etc.)
+    # Extract outlet names
     outlet_names = sorted(set([
         b.split('-')[0].strip() for b in valid_branches 
         if '-' in b
@@ -83,54 +105,59 @@ def show():
         st.error(f"No branches found for {selected_outlet}")
         return
     
-    # Calculate metrics for all branches (October data aggregated)
+    # Calculate metrics for all branches
     branch_metrics = []
     
     for branch in outlet_branches:
-        branch_data = df[df['Branch'] == branch]
+        # October data
+        october_data = df_october[df_october['Branch'] == branch]
         
-        if len(branch_data) == 0:
+        if len(october_data) == 0:
             continue
         
-        # Aggregate across October weeks
-        total_gross = branch_data['Gross Sales'].sum()
-        total_returns = branch_data['Returns'].sum()
-        total_net = branch_data['Net Sales'].sum()
+        # Aggregate October
+        oct_gross = october_data['Gross Sales'].sum()
+        oct_returns = october_data['Returns'].sum()
+        oct_net = october_data['Net Sales'].sum()
         
-        if total_gross == 0:
+        if oct_gross == 0:
             continue
         
-        # Calculate overall return rate
-        overall_return_rate = (total_returns / total_gross * 100)
+        oct_return_rate = (oct_returns / oct_gross * 100)
         
-        # Get status
-        status = get_status_for_return_rate(overall_return_rate)
+        # Get trend by comparing early months vs mid months (from full dataset)
+        branch_all = df[df['Branch'] == branch]
         
-        # Get trend (compare early October vs late October)
-        weeks = sorted(branch_data['Week'].unique())
-        if len(weeks) > 2:
-            mid = len(weeks) // 2
-            early = branch_data[branch_data['Week'].isin(weeks[:mid])]['Return Rate'].mean()
-            late = branch_data[branch_data['Week'].isin(weeks[mid:])]['Return Rate'].mean()
+        # Early months: March, April, May (Months 1-3)
+        early_months = branch_all[branch_all['Month'].isin([1, 2, 3])]
+        # Mid months: June, July, August (Months 4-6)
+        mid_months = branch_all[branch_all['Month'].isin([4, 5, 6])]
+        
+        if len(early_months) > 0 and len(mid_months) > 0:
+            early_rate = early_months['Return Rate'].mean()
+            mid_rate = mid_months['Return Rate'].mean()
             
-            if late < early - 2:
+            if mid_rate < early_rate - 2:
                 trend = "Improving"
-            elif late > early + 2:
+            elif mid_rate > early_rate + 2:
                 trend = "Worsening"
             else:
                 trend = "Stable"
         else:
             trend = "Stable"
         
+        # Get status
+        status = get_status_for_return_rate(oct_return_rate)
+        
         branch_metrics.append({
             'Branch': branch,
-            'Gross Sales': total_gross,
-            'Returns': total_returns,
-            'Net Sales': total_net,
-            'Return Rate': overall_return_rate,
+            'Gross Sales': oct_gross,
+            'Returns': oct_returns,
+            'Net Sales': oct_net,
+            'Return Rate': oct_return_rate,
             'Status': status,
             'Trend': trend,
-            'Weeks': len(weeks)
+            'Weeks': len(october_data['Week'].unique())
         })
     
     if not branch_metrics:
@@ -189,8 +216,8 @@ def show():
     st.plotly_chart(fig, use_container_width=True)
     
     # Trend Analysis
-    st.subheader("October Trends")
-    st.caption("Comparison of early October (Weeks 41-42) vs late October (Weeks 43-44)")
+    st.subheader("Return Rate Trends")
+    st.caption("Comparison of early period (March-May) vs mid period (June-August)")
     
     col1, col2, col3 = st.columns(3)
     
@@ -233,9 +260,10 @@ def show():
         display_df = metrics_df.copy()
         display_df['Branch Name'] = display_df['Branch'].apply(lambda x: x.split('-')[-1].strip() if '-' in x else x)
         
-        final_df = display_df[['Branch Name', 'Gross Sales', 'Returns', 'Return Rate', 'Trend', 'Status', 'Weeks']].copy()
+        final_df = display_df[['Branch Name', 'Gross Sales', 'Returns', 'Net Sales', 'Return Rate', 'Trend', 'Status', 'Weeks']].copy()
         final_df['Gross Sales'] = final_df['Gross Sales'].apply(lambda x: f"{int(x):,}")
         final_df['Returns'] = final_df['Returns'].apply(lambda x: f"{int(x):,}")
+        final_df['Net Sales'] = final_df['Net Sales'].apply(lambda x: f"{int(x):,}")
         final_df['Return Rate'] = final_df['Return Rate'].apply(lambda x: f"{x:.1f}%")
         final_df = final_df.sort_values('Return Rate', ascending=False)
         
