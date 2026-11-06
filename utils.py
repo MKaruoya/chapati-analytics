@@ -40,10 +40,15 @@ def calculate_monthly_metrics(branch_row, numeric_cols):
             sales = float(branch_row[sales_col]) if sales_col in branch_row.index else 0
             returns = float(branch_row[returns_col]) if returns_col in branch_row.index else 0
             
-            if sales > 0 or returns > 0:
-                order_qty = sales + returns
-                return_rate = (returns / order_qty * 100) if order_qty > 0 else 0
-                
+                          # Calculate return rate based on absolute values
+            order_qty = abs(sales) + abs(returns)
+            if order_qty > 0:
+                return_rate = (abs(returns) / order_qty * 100)
+            else:
+                return_rate = 0
+            
+            if sales != 0 or returns != 0:
+             
                 metrics.append({
                     'month_num': month_num,
                     'sales': sales,
