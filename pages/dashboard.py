@@ -161,16 +161,17 @@ def show():
             # Calculate monthly data
             monthly_data = calculate_monthly_metrics(branch_row, numeric_cols)
             
-            # Get current month data (use last active month)
+                               # Get October (M8) data specifically
             current_month = None
-            for i in range(len(monthly_data) - 1, -1, -1):
-                if monthly_data[i]['has_data']:
-                    current_month = monthly_data[i]
+            for month_data in monthly_data:
+                if month_data['month_num'] == 8 and month_data['has_data']:
+                    current_month = month_data
                     break
             
+            # Skip branches without October data
             if not current_month:
                 continue
-            
+   
             # Calculate metrics
             current_return_rate = float(current_month['return_rate'])
             current_sales = float(current_month['sales'])
