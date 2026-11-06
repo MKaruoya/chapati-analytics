@@ -11,13 +11,10 @@ def show():
     
     if st.button("📊 Load October Dataset", use_container_width=True):
         try:
-               file_path = os.path.join('data', 'october_weekly_sku_level.csv')
-      
+            file_path = os.path.join('data', 'october_weekly_sku_level.csv')
+            
             if not os.path.exists(file_path):
                 st.error(f"File not found: {file_path}")
-                st.info("Available files in data folder:")
-                if os.path.exists('data'):
-                    st.write(os.listdir('data'))
                 return
             
             df = pd.read_csv(file_path)
@@ -33,8 +30,8 @@ def show():
                 branches = df['Branch'].nunique()
                 st.metric("Branches", branches)
             with col4:
-                numeric = len([c for c in df.columns if df[c].dtype in ['int64', 'float64']])
-                st.metric("Metrics", numeric)
+                skus = df['SKU'].nunique() if 'SKU' in df.columns else 0
+                st.metric("SKUs", skus)
             
             st.subheader("Data Preview")
             st.dataframe(df.head(10), use_container_width=True)
