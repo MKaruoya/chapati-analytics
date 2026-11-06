@@ -112,12 +112,12 @@ def show():
         st.error("No valid branches found in data")
         return
     
-           # Extract outlet names (major outlets like MAJID, CHANDARANA, etc.)
+               # Extract outlet names (major outlets like MAJID, CHANDARANA, etc.)
     outlet_names = sorted(set([
         b.split('-')[0].strip() for b in valid_branches 
         if '-' in b
     ]))
-
+    
     if not outlet_names:
         st.error("No outlets found")
         return
@@ -130,10 +130,10 @@ def show():
         label_visibility="collapsed"
     )
     
-    # Get branches for selected outlet
+    # Get branches for selected outlet (match by first part before dash)
     outlet_branches = [
         b for b in valid_branches 
-        if extract_outlet_name(b) == selected_outlet
+        if b.split('-')[0].strip() == selected_outlet
     ]
     
     if not outlet_branches:
