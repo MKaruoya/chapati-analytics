@@ -8,28 +8,11 @@ def show():
     Load your Chapati order data to begin analysis.
     """)
     
-    # Dataset selection
-    st.subheader("Select Dataset")
-    dataset_choice = st.radio(
-        "Choose which dataset to load:",
-        [
-            "October Dataset (with Gross Sales)",
-            "October Dataset (Legacy)"
-        ],
-        label_visibility="collapsed"
-    )
-    
-    if st.button("📊 Load Dataset", use_container_width=True):
+    if st.button("📊 Load October Dataset", use_container_width=True):
         try:
-            if dataset_choice == "October Dataset (with Gross Sales)":
-                df = pd.read_csv('data/october_dataset_with_gross.csv')
-                dataset_name = "October Dataset (with Gross Sales)"
-            else:
-                df = pd.read_csv('data/october_dataset_transformed.csv')
-                dataset_name = "October Dataset (Legacy)"
-            
+            df = pd.read_csv('data/october_dataset_with_gross.csv')
             st.session_state.data = df
-            st.success(f"✅ {dataset_name} loaded!")
+            st.success("✅ October dataset loaded!")
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:
