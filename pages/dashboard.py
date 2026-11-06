@@ -36,6 +36,14 @@ def show():
     
     df = st.session_state.data.copy()
     
+    # Filter for October data only (Weeks 41-44)
+    october_weeks = [41, 42, 43, 44]
+    df = df[df['Week'].isin(october_weeks)].copy()
+    
+    if len(df) == 0:
+        st.error("No October data found in dataset")
+        return
+    
     # Extract valid branches
     all_names = df['Branch'].dropna().unique()
     valid_branches = [
@@ -44,7 +52,7 @@ def show():
     ]
     
     if not valid_branches:
-        st.error("No valid branches found in data")
+        st.error("No valid branches found in October data")
         return
     
     # Extract outlet names (major outlets like MAJID, CHANDARANA, etc.)
@@ -65,7 +73,7 @@ def show():
         label_visibility="collapsed"
     )
     
-    # Get branches for selected outlet (match by first part before dash)
+    # Get branches for selected outlet
     outlet_branches = [
         b for b in valid_branches 
         if b.split('-')[0].strip() == selected_outlet
@@ -75,7 +83,7 @@ def show():
         st.error(f"No branches found for {selected_outlet}")
         return
     
-    # Calculate metrics for all branches (aggregated across all weeks)
+    # Calculate metrics for all branches (October data aggregated)
     branch_metrics = []
     
     for branch in outlet_branches:
@@ -84,7 +92,7 @@ def show():
         if len(branch_data) == 0:
             continue
         
-        # Aggregate across all weeks
+        # Aggregate across October weeks
         total_gross = branch_data['Gross Sales'].sum()
         total_returns = branch_data['Returns'].sum()
         total_net = branch_data['Net Sales'].sum()
@@ -98,16 +106,16 @@ def show():
         # Get status
         status = get_status_for_return_rate(overall_return_rate)
         
-        # Get trend (compare first half vs second half of weeks)
+        # Get trend (compare early October vs late October)
         weeks = sorted(branch_data['Week'].unique())
         if len(weeks) > 2:
             mid = len(weeks) // 2
-            first_half = branch_data[branch_data['Week'].isin(weeks[:mid])]['Return Rate'].mean()
-            second_half = branch_data[branch_data['Week'].isin(weeks[mid:])]['Return Rate'].mean()
+            early = branch_data[branch_data['Week'].isin(weeks[:mid])]['Return Rate'].mean()
+            late = branch_data[branch_data['Week'].isin(weeks[mid:])]['Return Rate'].mean()
             
-            if second_half < first_half - 2:
+            if late < early - 2:
                 trend = "Improving"
-            elif second_half > first_half + 2:
+            elif late > early + 2:
                 trend = "Worsening"
             else:
                 trend = "Stable"
@@ -126,14 +134,14 @@ def show():
         })
     
     if not branch_metrics:
-        st.info("No data available for selected outlet")
+        st.info("No data available for selected outlet in October")
         return
     
     # Create metrics dataframe
     metrics_df = pd.DataFrame(branch_metrics)
     
     # Display overview metrics
-    st.subheader("Performance Summary")
+    st.subheader("October Performance Summary")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -152,7 +160,7 @@ def show():
         st.metric("Improving", improving_count)
     
     # Branch Performance Chart
-    st.subheader("Return Rate by Branch")
+    st.subheader("October Return Rate by Branch")
     st.caption("Sorted by return rate (highest to lowest)")
     
     sorted_df = metrics_df.sort_values('Return Rate', ascending=False)
@@ -169,7 +177,7 @@ def show():
     ))
     
     fig.update_layout(
-        title="Return Rate Analysis",
+        title="October Return Rate Analysis",
         height=500,
         xaxis_tickangle=-45,
         showlegend=False,
@@ -181,8 +189,8 @@ def show():
     st.plotly_chart(fig, use_container_width=True)
     
     # Trend Analysis
-    st.subheader("Return Rate Trends")
-    st.caption("Comparison of early weeks vs recent weeks")
+    st.subheader("October Trends")
+    st.caption("Comparison of early October (Weeks 41-42) vs late October (Weeks 43-44)")
     
     col1, col2, col3 = st.columns(3)
     
