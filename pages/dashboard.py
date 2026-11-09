@@ -291,11 +291,9 @@ def show():
     with tab2:
         if len(negative_branches) == 0:
             st.success("✅ No branches with negative sales!")
-        else:
-            st.warning(f"⚠️ **{len(negative_branches)} branches with NEGATIVE NET SALES**\n\n" +
-                      "These branches are returning MORE than they ordered.\n" +
-                      "This indicates serious quality or demand issues.")
-            
+                  else:
+            st.info(f"**{len(negative_branches)} branches with Negative Net Sales**")
+          
             # Overview
             st.subheader("Negative Sales Summary")
             col1, col2, col3 = st.columns(3)
@@ -355,10 +353,4 @@ def show():
                 final_df = final_df.sort_values('Return Rate', ascending=False)
                 
                 st.dataframe(final_df, use_container_width=True, hide_index=True)
-            
-            st.error("🚨 **ACTION REQUIRED**\n\n" +
-                    "These branches need immediate investigation:\n" +
-                    "- Quality issues with products?\n" +
-                    "- Storage/handling problems?\n" +
-                    "- Demand mismatch?\n" +
-                    "- Ordering errors?")
+                      # Removed action required message
