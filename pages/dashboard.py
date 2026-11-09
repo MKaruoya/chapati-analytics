@@ -291,9 +291,9 @@ def show():
     with tab2:
         if len(negative_branches) == 0:
             st.success("✅ No branches with negative sales!")
-                  else:
+        else:
             st.info(f"**{len(negative_branches)} branches with Negative Net Sales**")
-          
+            
             # Overview
             st.subheader("Negative Sales Summary")
             col1, col2, col3 = st.columns(3)
@@ -353,4 +353,3 @@ def show():
                 final_df = final_df.sort_values('Return Rate', ascending=False)
                 
                 st.dataframe(final_df, use_container_width=True, hide_index=True)
-                      # Removed action required message
