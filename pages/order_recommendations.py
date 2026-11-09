@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from scipy import stats
 
 def get_month_from_week(week):
     """Convert week number to month (1-8)"""
@@ -44,37 +43,41 @@ def calculate_recommendations(branch_data):
         intervals = np.diff(weeks)
         avg_interval = intervals.mean()
     else:
-        avg_interval = 7  # Default to weekly
+        avg_interval = 7
     
     # Recommendations based on return rate
     if current_return_rate > 20:
-        # High returns - reduce quantity
         recommended_quantity = avg_quantity * 0.85
         recommended_interval = avg_interval * 1.1
         expected_return_reduction = current_return_rate * 0.3
+        expected_sales_increase = 0
         confidence = 0.75
-        reasoning = "High return rate detected. Reduce order quantity and increase order frequency to match actual demand."
+        status = "HIGH PRIORITY"
+        action = "Reduce Orders"
     elif current_return_rate > 15:
-        # Moderate returns - slight adjustment
         recommended_quantity = avg_quantity * 0.90
         recommended_interval = avg_interval * 1.05
         expected_return_reduction = current_return_rate * 0.2
+        expected_sales_increase = 0
         confidence = 0.70
-        reasoning = "Moderate return rate. Small adjustments to quantity and frequency recommended."
+        status = "MODERATE"
+        action = "Adjust Orders"
     elif current_return_rate > 10:
-        # Watch - maintain or slight increase
         recommended_quantity = avg_quantity * 0.95
         recommended_interval = avg_interval * 0.95
         expected_return_reduction = current_return_rate * 0.1
+        expected_sales_increase = 0
         confidence = 0.65
-        reasoning = "Return rate within acceptable range. Minor optimizations possible."
+        status = "WATCH"
+        action = "Fine-tune Orders"
     else:
-        # Good - maintain current pattern
-        recommended_quantity = avg_quantity
-        recommended_interval = avg_interval
+        recommended_quantity = avg_quantity * 1.15
+        recommended_interval = avg_interval * 0.90
         expected_return_reduction = 0
-        confidence = 0.80
-        reasoning = "Excellent performance. Maintain current ordering pattern."
+        expected_sales_increase = 12
+        confidence = 0.85
+        status = "EXCELLENT"
+        action = "Increase Orders"
     
     return {
         'avg_quantity': avg_quantity,
@@ -83,8 +86,10 @@ def calculate_recommendations(branch_data):
         'recommended_interval': recommended_interval,
         'current_return_rate': current_return_rate,
         'expected_return_reduction': expected_return_reduction,
+        'expected_sales_increase': expected_sales_increase,
         'confidence': confidence,
-        'reasoning': reasoning,
+        'status': status,
+        'action': action,
         'quantity_change': ((recommended_quantity - avg_quantity) / avg_quantity * 100),
         'interval_change': ((recommended_interval - avg_interval) / avg_interval * 100)
     }
@@ -171,29 +176,29 @@ def show():
     rec_df = pd.DataFrame(recommendations_list)
     
     # Overview metrics
-    st.subheader("Recommendations Summary")
+    st.subheader("Summary")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric("Total Branches", len(rec_df))
     
     with col2:
-        avg_return_rate = rec_df['current_return_rate'].mean()
-        st.metric("Average Return Rate", f"{avg_return_rate:.1f}%")
+        excellent = len(rec_df[rec_df['status'] == 'EXCELLENT'])
+        st.metric("Excellent", excellent)
     
     with col3:
-        high_priority = len(rec_df[rec_df['current_return_rate'] > 20])
+        high_priority = len(rec_df[rec_df['status'] == 'HIGH PRIORITY'])
         st.metric("High Priority", high_priority)
     
     with col4:
-        avg_confidence = rec_df['confidence'].mean()
-        st.metric("Avg Confidence", f"{avg_confidence:.0%}")
+        avg_return_rate = rec_df['current_return_rate'].mean()
+        st.metric("Avg Return Rate", f"{avg_return_rate:.1f}%")
     
-    # Branch selector for detailed recommendations
-    st.subheader("Detailed Recommendations")
+    # Branch selector
+    st.subheader("Branch Recommendations")
     
     selected_branch = st.selectbox(
-        "Select a branch to view detailed recommendations:",
+        "Select a branch:",
         rec_df['Branch Name'].tolist(),
         label_visibility="collapsed"
     )
@@ -201,80 +206,53 @@ def show():
     # Get selected branch recommendation
     branch_rec = rec_df[rec_df['Branch Name'] == selected_branch].iloc[0]
     
-    # Display recommendations
+    # Status badge
+    status_colors = {
+        'EXCELLENT': '#28a745',
+        'WATCH': '#ffc107',
+        'MODERATE': '#fd7e14',
+        'HIGH PRIORITY': '#dc3545'
+    }
+    
+    status_color = status_colors.get(branch_rec['status'], '#6c757d')
+    
+    st.markdown(f"""
+    <div style='background: {status_color}; color: white; padding: 1rem; border-radius: 4px; margin-bottom: 1rem;'>
+        <b style='font-size: 18px;'>{branch_rec['status']}</b><br>
+        {branch_rec['action']}
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Current vs Recommended
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("**Current Order Pattern**")
-        st.write(f"Average Quantity: **{branch_rec['avg_quantity']:.0f}** units")
-        st.write(f"Average Interval: **{branch_rec['avg_interval']:.1f}** days")
-        st.write(f"Current Return Rate: **{branch_rec['current_return_rate']:.1f}%**")
+        st.write("**Current**")
+        st.write(f"Quantity: {branch_rec['avg_quantity']:.0f} units")
+        st.write(f"Interval: {branch_rec['avg_interval']:.1f} days")
+        st.write(f"Return Rate: {branch_rec['current_return_rate']:.1f}%")
     
     with col2:
-        st.markdown("**Recommended Order Pattern**")
-        st.write(f"Recommended Quantity: **{branch_rec['recommended_quantity']:.0f}** units")
-        st.write(f"Recommended Interval: **{branch_rec['recommended_interval']:.1f}** days")
+        st.write("**Recommended**")
+        st.write(f"Quantity: {branch_rec['recommended_quantity']:.0f} units")
+        st.write(f"Interval: {branch_rec['recommended_interval']:.1f} days")
         
-        # Show change
-        qty_change = branch_rec['quantity_change']
-        interval_change = branch_rec['interval_change']
-        
-        if qty_change > 0:
-            st.write(f"Change: **+{qty_change:.1f}%** (increase)")
-        elif qty_change < 0:
-            st.write(f"Change: **{qty_change:.1f}%** (decrease)")
+        if branch_rec['expected_sales_increase'] > 0:
+            st.write(f"Expected Sales: +{branch_rec['expected_sales_increase']:.1f}%")
         else:
-            st.write(f"Change: **No change**")
+            new_rate = branch_rec['current_return_rate'] - branch_rec['expected_return_reduction']
+            st.write(f"Expected Return Rate: {new_rate:.1f}%")
     
-    # Expected impact
-    st.subheader("Expected Impact")
-    col1, col2, col3 = st.columns(3)
+    # All branches table
+    st.subheader("All Branches")
     
-    with col1:
-        st.metric("Return Rate Reduction", f"{branch_rec['expected_return_reduction']:.1f}%")
-        st.caption("Expected decrease in returns")
+    display_df = rec_df[['Branch Name', 'current_return_rate', 'recommended_quantity', 'status', 'action', 'confidence']].copy()
+    display_df.columns = ['Branch', 'Return Rate', 'Recommended Qty', 'Status', 'Action', 'Confidence']
     
-    with col2:
-        new_return_rate = branch_rec['current_return_rate'] - branch_rec['expected_return_reduction']
-        st.metric("New Return Rate", f"{new_return_rate:.1f}%")
-        st.caption("Projected return rate")
-    
-    with col3:
-        st.metric("Confidence Level", f"{branch_rec['confidence']:.0%}")
-        st.caption("Recommendation confidence")
-    
-    # Reasoning
-    st.subheader("Reasoning")
-    st.info(branch_rec['reasoning'])
-    
-    # Implementation steps
-    st.subheader("Implementation Steps")
-    
-    steps = [
-        f"1. **Adjust Order Quantity**: Change from {branch_rec['avg_quantity']:.0f} to {branch_rec['recommended_quantity']:.0f} units",
-        f"2. **Adjust Order Interval**: Change from {branch_rec['avg_interval']:.1f} to {branch_rec['recommended_interval']:.1f} days",
-        "3. **Monitor Performance**: Track return rates for 2-4 weeks",
-        "4. **Fine-tune**: Make additional adjustments based on actual results",
-        "5. **Document**: Record the new ordering pattern for future reference"
-    ]
-    
-    for step in steps:
-        st.write(step)
-    
-    # All branches comparison
-    st.subheader("All Branches Comparison")
-    
-    display_df = rec_df[['Branch Name', 'avg_quantity', 'recommended_quantity', 'current_return_rate', 'expected_return_reduction', 'confidence']].copy()
-    display_df.columns = ['Branch', 'Current Qty', 'Recommended Qty', 'Return Rate', 'Expected Reduction', 'Confidence']
-    
-    display_df['Current Qty'] = display_df['Current Qty'].apply(lambda x: f"{int(x)}")
-    display_df['Recommended Qty'] = display_df['Recommended Qty'].apply(lambda x: f"{int(x)}")
     display_df['Return Rate'] = display_df['Return Rate'].apply(lambda x: f"{x:.1f}%")
-    display_df['Expected Reduction'] = display_df['Expected Reduction'].apply(lambda x: f"{x:.1f}%")
+    display_df['Recommended Qty'] = display_df['Recommended Qty'].apply(lambda x: f"{int(x)}")
     display_df['Confidence'] = display_df['Confidence'].apply(lambda x: f"{x:.0%}")
     
     display_df = display_df.sort_values('Return Rate', ascending=False)
     
     st.dataframe(display_df, use_container_width=True, hide_index=True)
-    
-    st.caption("📊 Recommendations are based on October performance data and historical trends.")
