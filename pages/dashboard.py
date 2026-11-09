@@ -233,7 +233,7 @@ def show():
             ))
             
             fig.update_layout(
-                title="October Return Rate Analysis (Normal Sales)",
+                title=f"October Return Rates - {selected_outlet}",
                 height=500,
                 xaxis_tickangle=-45,
                 showlegend=False,
@@ -344,7 +344,7 @@ def show():
             ))
             
             fig.update_layout(
-                title="Negative Net Sales (Returns > Orders)",
+                title=f"Negative Net Sales - {selected_outlet}",
                 height=500,
                 xaxis_tickangle=-45,
                 showlegend=False,
