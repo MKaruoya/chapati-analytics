@@ -194,65 +194,31 @@ def show():
         avg_return_rate = rec_df['current_return_rate'].mean()
         st.metric("Avg Return Rate", f"{avg_return_rate:.1f}%")
     
-    # Branch selector
-    st.subheader("Branch Recommendations")
+    # Recommendations table
+    st.subheader("Recommendations")
     
-    selected_branch = st.selectbox(
-        "Select a branch:",
-        rec_df['Branch Name'].tolist(),
-        label_visibility="collapsed"
-    )
+    # Get current net sales for each branch
+    branch_net_sales = []
+    for branch in rec_df['Branch'].tolist():
+        branch_data = df[df['Branch'] == branch]
+        october_data = branch_data[branch_data['Week'].isin(october_weeks)]
+        net_sales = october_data['Net Sales'].sum()
+        branch_net_sales.append(net_sales)
     
-    # Get selected branch recommendation
-    branch_rec = rec_df[rec_df['Branch Name'] == selected_branch].iloc[0]
+    rec_df['Net Sales'] = branch_net_sales
     
-    # Status badge
-    status_colors = {
-        'EXCELLENT': '#28a745',
-        'WATCH': '#ffc107',
-        'MODERATE': '#fd7e14',
-        'HIGH PRIORITY': '#dc3545'
-    }
-    
-    status_color = status_colors.get(branch_rec['status'], '#6c757d')
-    
-    st.markdown(f"""
-    <div style='background: {status_color}; color: white; padding: 1rem; border-radius: 4px; margin-bottom: 1rem;'>
-        <b style='font-size: 18px;'>{branch_rec['status']}</b><br>
-        {branch_rec['action']}
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Current vs Recommended
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("**Current**")
-        st.write(f"Quantity: {branch_rec['avg_quantity']:.0f} units")
-        st.write(f"Interval: {branch_rec['avg_interval']:.1f} days")
-        st.write(f"Return Rate: {branch_rec['current_return_rate']:.1f}%")
-    
-    with col2:
-        st.write("**Recommended**")
-        st.write(f"Quantity: {branch_rec['recommended_quantity']:.0f} units")
-        st.write(f"Interval: {branch_rec['recommended_interval']:.1f} days")
-        
-        if branch_rec['expected_sales_increase'] > 0:
-            st.write(f"Expected Sales: +{branch_rec['expected_sales_increase']:.1f}%")
-        else:
-            new_rate = branch_rec['current_return_rate'] - branch_rec['expected_return_reduction']
-            st.write(f"Expected Return Rate: {new_rate:.1f}%")
-    
-    # All branches table
-    st.subheader("All Branches")
-    
-    display_df = rec_df[['Branch Name', 'current_return_rate', 'recommended_quantity', 'status', 'action', 'confidence']].copy()
-    display_df.columns = ['Branch', 'Return Rate', 'Recommended Qty', 'Status', 'Action', 'Confidence']
+    # Create display dataframe
+    display_df = rec_df[['Branch Name', 'current_return_rate', 'avg_quantity', 'recommended_quantity', 'Net Sales', 'status', 'action', 'confidence']].copy()
+    display_df.columns = ['Branch', 'Return Rate', 'Current Qty', 'Recommended Qty', 'Net Sales', 'Status', 'Action', 'Confidence']
     
     display_df['Return Rate'] = display_df['Return Rate'].apply(lambda x: f"{x:.1f}%")
+    display_df['Current Qty'] = display_df['Current Qty'].apply(lambda x: f"{int(x)}")
     display_df['Recommended Qty'] = display_df['Recommended Qty'].apply(lambda x: f"{int(x)}")
+    display_df['Net Sales'] = display_df['Net Sales'].apply(lambda x: f"{int(x):,}")
     display_df['Confidence'] = display_df['Confidence'].apply(lambda x: f"{x:.0%}")
     
     display_df = display_df.sort_values('Return Rate', ascending=False)
     
     st.dataframe(display_df, use_container_width=True, hide_index=True)
+    
+    st.caption("📊 Recommendations based on October performance. Current Qty = average order quantity. Net Sales = total October net sales.")
