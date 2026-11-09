@@ -1,251 +1,280 @@
-﻿import streamlit as st
+import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
 import numpy as np
-from utils import calculate_weekly_metrics, find_optimal_quantity, extract_outlet_name
+from scipy import stats
+
+def get_month_from_week(week):
+    """Convert week number to month (1-8)"""
+    if week <= 14:
+        return 1  # March
+    elif week <= 18:
+        return 2  # April
+    elif week <= 22:
+        return 3  # May
+    elif week <= 27:
+        return 4  # June
+    elif week <= 31:
+        return 5  # July
+    elif week <= 36:
+        return 6  # August
+    elif week <= 40:
+        return 7  # September
+    else:
+        return 8  # October
+
+def calculate_recommendations(branch_data):
+    """Calculate optimal order recommendations for a branch"""
+    
+    if len(branch_data) == 0:
+        return None
+    
+    # Current metrics
+    avg_quantity = branch_data['Gross Sales'].mean()
+    total_quantity = branch_data['Gross Sales'].sum()
+    total_returns = branch_data['Returns'].sum()
+    
+    if total_quantity == 0:
+        return None
+    
+    current_return_rate = (total_returns / total_quantity * 100)
+    
+    # Calculate order interval (days between orders)
+    weeks = sorted(branch_data['Week'].unique())
+    if len(weeks) > 1:
+        intervals = np.diff(weeks)
+        avg_interval = intervals.mean()
+    else:
+        avg_interval = 7  # Default to weekly
+    
+    # Recommendations based on return rate
+    if current_return_rate > 20:
+        # High returns - reduce quantity
+        recommended_quantity = avg_quantity * 0.85
+        recommended_interval = avg_interval * 1.1
+        expected_return_reduction = current_return_rate * 0.3
+        confidence = 0.75
+        reasoning = "High return rate detected. Reduce order quantity and increase order frequency to match actual demand."
+    elif current_return_rate > 15:
+        # Moderate returns - slight adjustment
+        recommended_quantity = avg_quantity * 0.90
+        recommended_interval = avg_interval * 1.05
+        expected_return_reduction = current_return_rate * 0.2
+        confidence = 0.70
+        reasoning = "Moderate return rate. Small adjustments to quantity and frequency recommended."
+    elif current_return_rate > 10:
+        # Watch - maintain or slight increase
+        recommended_quantity = avg_quantity * 0.95
+        recommended_interval = avg_interval * 0.95
+        expected_return_reduction = current_return_rate * 0.1
+        confidence = 0.65
+        reasoning = "Return rate within acceptable range. Minor optimizations possible."
+    else:
+        # Good - maintain current pattern
+        recommended_quantity = avg_quantity
+        recommended_interval = avg_interval
+        expected_return_reduction = 0
+        confidence = 0.80
+        reasoning = "Excellent performance. Maintain current ordering pattern."
+    
+    return {
+        'avg_quantity': avg_quantity,
+        'recommended_quantity': recommended_quantity,
+        'avg_interval': avg_interval,
+        'recommended_interval': recommended_interval,
+        'current_return_rate': current_return_rate,
+        'expected_return_reduction': expected_return_reduction,
+        'confidence': confidence,
+        'reasoning': reasoning,
+        'quantity_change': ((recommended_quantity - avg_quantity) / avg_quantity * 100),
+        'interval_change': ((recommended_interval - avg_interval) / avg_interval * 100)
+    }
 
 def show():
-    st.header("Order Recommendations")
+    # Check if data is loaded
     if st.session_state.data is None:
-        st.warning("Please upload data first")
-    else:
-        df = st.session_state.data.copy()
-        all_names = df['Branch'].dropna().unique()
-        valid_branches = [name for name in all_names if isinstance(name, str) and '-' in name and 'CHAPATI' not in name.upper()]
-        outlet_names = sorted(set([extract_outlet_name(b) for b in valid_branches if extract_outlet_name(b)]))
+        st.warning("Please upload data first from the Data Upload page")
+        return
+    
+    df = st.session_state.data.copy()
+    
+    # Add month column
+    df['Month'] = df['Week'].apply(get_month_from_week)
+    
+    # Filter for October data
+    october_weeks = [41, 42, 43, 44]
+    df_october = df[df['Week'].isin(october_weeks)].copy()
+    
+    if len(df_october) == 0:
+        st.error("No October data found in dataset")
+        return
+    
+    # Extract valid branches
+    all_names = df_october['Branch'].dropna().unique()
+    valid_branches = [
+        name for name in all_names 
+        if isinstance(name, str) and len(name) > 0
+    ]
+    
+    if not valid_branches:
+        st.error("No valid branches found in October data")
+        return
+    
+    # Extract outlet names
+    outlet_names = sorted(set([
+        b.split('-')[0].strip() for b in valid_branches 
+        if '-' in b
+    ]))
+    
+    if not outlet_names:
+        st.error("No outlets found")
+        return
+    
+    # Outlet selector
+    st.subheader("Select Outlet")
+    selected_outlet = st.selectbox(
+        "Choose an outlet to analyze:",
+        outlet_names,
+        label_visibility="collapsed"
+    )
+    
+    # Get branches for selected outlet
+    outlet_branches = [
+        b for b in valid_branches 
+        if b.split('-')[0].strip() == selected_outlet
+    ]
+    
+    if not outlet_branches:
+        st.error(f"No branches found for {selected_outlet}")
+        return
+    
+    # Calculate recommendations for all branches
+    recommendations_list = []
+    
+    for branch in outlet_branches:
+        branch_data = df[df['Branch'] == branch]
         
-        if not outlet_names:
-            st.error("No outlets found")
+        if len(branch_data) == 0:
+            continue
+        
+        rec = calculate_recommendations(branch_data)
+        
+        if rec:
+            rec['Branch'] = branch
+            rec['Branch Name'] = branch.split('-')[-1].strip() if '-' in branch else branch
+            recommendations_list.append(rec)
+    
+    if not recommendations_list:
+        st.info("No recommendations available for selected outlet")
+        return
+    
+    # Create recommendations dataframe
+    rec_df = pd.DataFrame(recommendations_list)
+    
+    # Overview metrics
+    st.subheader("Recommendations Summary")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Branches", len(rec_df))
+    
+    with col2:
+        avg_return_rate = rec_df['current_return_rate'].mean()
+        st.metric("Average Return Rate", f"{avg_return_rate:.1f}%")
+    
+    with col3:
+        high_priority = len(rec_df[rec_df['current_return_rate'] > 20])
+        st.metric("High Priority", high_priority)
+    
+    with col4:
+        avg_confidence = rec_df['confidence'].mean()
+        st.metric("Avg Confidence", f"{avg_confidence:.0%}")
+    
+    # Branch selector for detailed recommendations
+    st.subheader("Detailed Recommendations")
+    
+    selected_branch = st.selectbox(
+        "Select a branch to view detailed recommendations:",
+        rec_df['Branch Name'].tolist(),
+        label_visibility="collapsed"
+    )
+    
+    # Get selected branch recommendation
+    branch_rec = rec_df[rec_df['Branch Name'] == selected_branch].iloc[0]
+    
+    # Display recommendations
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Current Order Pattern**")
+        st.write(f"Average Quantity: **{branch_rec['avg_quantity']:.0f}** units")
+        st.write(f"Average Interval: **{branch_rec['avg_interval']:.1f}** days")
+        st.write(f"Current Return Rate: **{branch_rec['current_return_rate']:.1f}%**")
+    
+    with col2:
+        st.markdown("**Recommended Order Pattern**")
+        st.write(f"Recommended Quantity: **{branch_rec['recommended_quantity']:.0f}** units")
+        st.write(f"Recommended Interval: **{branch_rec['recommended_interval']:.1f}** days")
+        
+        # Show change
+        qty_change = branch_rec['quantity_change']
+        interval_change = branch_rec['interval_change']
+        
+        if qty_change > 0:
+            st.write(f"Change: **+{qty_change:.1f}%** (increase)")
+        elif qty_change < 0:
+            st.write(f"Change: **{qty_change:.1f}%** (decrease)")
         else:
-            selected_outlet = st.selectbox("Select outlet", outlet_names, label_visibility="collapsed")
-            outlet_branches = [b for b in valid_branches if extract_outlet_name(b) == selected_outlet]
-            numeric_cols = [col for col in df.columns[1:] if df[col].dtype in ['int64', 'float64']]
-            
-            recommendations = []
-            
-            for branch in outlet_branches:
-                branch_row = df[df['Branch'] == branch]
-                if len(branch_row) > 0:
-                    weekly_data = calculate_weekly_metrics(branch_row, numeric_cols)
-                    if weekly_data:
-                        active_weeks = [w for w in weekly_data if w['order_quantity'] > 0]
-                        if active_weeks:
-                            current_avg_qty = np.mean([w['order_quantity'] for w in active_weeks])
-                            
-                            # Calculate overall return rate (not average of percentages)
-                            total_order_qty = sum([w['order_quantity'] for w in active_weeks])
-                            total_returns = sum([w['returns'] for w in active_weeks])
-                            current_avg_return = (total_returns / total_order_qty * 100) if total_order_qty > 0 else 0
-                            
-                            optimal_qty, optimal_return_rate, corr, best_quartile, confidence = find_optimal_quantity(weekly_data)
-                            
-                            if optimal_qty:
-                                qty_change = optimal_qty - current_avg_qty
-                                qty_change_pct = ((qty_change) / current_avg_qty * 100) if current_avg_qty > 0 else 0
-                                expected_improvement = current_avg_return - optimal_return_rate
-                                
-                                if current_avg_return > 25:
-                                    status = "CRITICAL"
-                                    priority = 1
-                                elif current_avg_return > 20:
-                                    status = "HIGH"
-                                    priority = 2
-                                elif current_avg_return > 15:
-                                    status = "MODERATE"
-                                    priority = 3
-                                else:
-                                    status = "GOOD"
-                                    priority = 4
-                                
-                                if abs(qty_change_pct) < 10:
-                                    effort = "Low"
-                                    effort_color = "#28a745"
-                                elif abs(qty_change_pct) < 25:
-                                    effort = "Medium"
-                                    effort_color = "#ffc107"
-                                else:
-                                    effort = "High"
-                                    effort_color = "#fd7e14"
-                                
-                                impact_score = expected_improvement * confidence
-                                
-                                recommendations.append({
-                                    'Branch': branch,
-                                    'Branch Name': branch.split('-')[-1].strip() if '-' in branch else branch,
-                                    'Current Qty': current_avg_qty,
-                                    'Current Return %': current_avg_return,
-                                    'Recommended Qty': optimal_qty,
-                                    'Expected Return %': optimal_return_rate,
-                                    'Qty Change': qty_change,
-                                    'Qty Change %': qty_change_pct,
-                                    'Expected Improvement': expected_improvement,
-                                    'Confidence': confidence,
-                                    'Status': status,
-                                    'Priority': priority,
-                                    'Effort': effort,
-                                    'Effort Color': effort_color,
-                                    'Impact Score': impact_score
-                                })
-            
-            if recommendations:
-                rec_df = pd.DataFrame(recommendations)
-                rec_df = rec_df.sort_values('Priority')
-                
-                st.subheader("Outlet Impact Summary")
-                st.caption(f"If all recommendations are implemented for {selected_outlet}")
-                
-                col1, col2, col3, col4, col5 = st.columns(5)
-                
-                total_branches = len(rec_df)
-                current_avg_return_all = rec_df['Current Return %'].mean()
-                expected_avg_return_all = rec_df['Expected Return %'].mean()
-                total_improvement = current_avg_return_all - expected_avg_return_all
-                total_improvement_pct = (total_improvement / current_avg_return_all * 100) if current_avg_return_all > 0 else 0
-                
-                col1.metric("Total Branches", total_branches)
-                col2.metric("Current Avg Return %", f"{current_avg_return_all:.1f}%")
-                col3.metric("Expected Avg Return %", f"{expected_avg_return_all:.1f}%")
-                col4.metric("Total Improvement", f"{total_improvement:.1f}%")
-                col5.metric("Improvement %", f"{total_improvement_pct:.1f}%")
-                
-                st.subheader("All Recommendations")
-                
-                for idx, row in rec_df.iterrows():
-                    if row['Status'] == 'CRITICAL':
-                        status_color = '#dc3545'
-                    elif row['Status'] == 'HIGH':
-                        status_color = '#fd7e14'
-                    elif row['Status'] == 'MODERATE':
-                        status_color = '#ffc107'
-                    else:
-                        status_color = '#28a745'
-                    
-                    with st.expander(f"{row['Branch Name']} | Current: {row['Current Qty']:.0f} → Recommended: {row['Recommended Qty']:.0f} pouches | {row['Status']}"):
-                        col1, col2, col3, col4 = st.columns(4)
-                        
-                        with col1:
-                            st.markdown("**Current Pattern**")
-                            st.write(f"Order: {row['Current Qty']:.0f} pouches/week")
-                            st.write(f"Return Rate: {row['Current Return %']:.1f}%")
-                        
-                        with col2:
-                            st.markdown("**Recommended Pattern**")
-                            st.write(f"Order: {row['Recommended Qty']:.0f} pouches/week")
-                            st.write(f"Return Rate: {row['Expected Return %']:.1f}%")
-                        
-                        with col3:
-                            st.markdown("**Change Required**")
-                            if row['Qty Change'] > 0:
-                                st.write(f"Increase by {row['Qty Change']:.0f} pouches")
-                                st.write(f"({row['Qty Change %']:+.1f}%)")
-                            elif row['Qty Change'] < 0:
-                                st.write(f"Decrease by {abs(row['Qty Change']):.0f} pouches")
-                                st.write(f"({row['Qty Change %']:.1f}%)")
-                            else:
-                                st.write("No change needed")
-                        
-                        with col4:
-                            st.markdown("**Expected Impact**")
-                            st.write(f"Return Reduction: {row['Expected Improvement']:.1f}%")
-                            st.write(f"Effort: {row['Effort']}")
-                            st.write(f"Confidence: {row['Confidence']*100:.0f}%")
-                        
-                        st.markdown("---")
-                        st.markdown("**Action Steps:**")
-                        st.write("1. Review current ordering pattern with store manager")
-                        st.write(f"2. Adjust weekly order from {row['Current Qty']:.0f} to {row['Recommended Qty']:.0f} pouches")
-                        st.write("3. Monitor return rate for 2-3 weeks")
-                        st.write(f"4. Expected improvement: {row['Expected Improvement']:.1f}% reduction in returns")
-                
-                st.subheader("Visualizations")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    fig = go.Figure()
-                    
-                    fig.add_trace(go.Bar(
-                        x=rec_df['Branch Name'],
-                        y=rec_df['Current Qty'],
-                        name='Current',
-                        marker_color='#95a5a6'
-                    ))
-                    
-                    fig.add_trace(go.Bar(
-                        x=rec_df['Branch Name'],
-                        y=rec_df['Recommended Qty'],
-                        name='Recommended',
-                        marker_color='#3498db'
-                    ))
-                    
-                    fig.update_layout(
-                        title="Current vs Recommended Order Quantities",
-                        barmode='group',
-                        height=450,
-                        xaxis_tickangle=-45,
-                        showlegend=True,
-                        font=dict(size=11)
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-                
-                with col2:
-                    fig2 = go.Figure()
-                    
-                    fig2.add_trace(go.Bar(
-                        x=rec_df['Branch Name'],
-                        y=rec_df['Current Return %'],
-                        name='Current',
-                        marker_color='#e74c3c'
-                    ))
-                    
-                    fig2.add_trace(go.Bar(
-                        x=rec_df['Branch Name'],
-                        y=rec_df['Expected Return %'],
-                        name='Expected',
-                        marker_color='#27ae60'
-                    ))
-                    
-                    fig2.update_layout(
-                        title="Return Rate: Current vs Expected",
-                        barmode='group',
-                        height=450,
-                        xaxis_tickangle=-45,
-                        showlegend=True,
-                        font=dict(size=11)
-                    )
-                    
-                    st.plotly_chart(fig2, use_container_width=True)
-                
-                st.subheader("Export Action Plan")
-                
-                export_df = rec_df[[
-                    'Branch Name', 'Current Qty', 'Recommended Qty', 'Qty Change %',
-                    'Current Return %', 'Expected Return %', 'Expected Improvement',
-                    'Effort', 'Confidence', 'Status'
-                ]].copy()
-                
-                export_df.columns = [
-                    'Branch', 'Current Weekly Qty', 'Recommended Weekly Qty', 'Change %',
-                    'Current Return %', 'Expected Return %', 'Expected Improvement %',
-                    'Implementation Effort', 'Confidence', 'Status'
-                ]
-                
-                export_df['Current Weekly Qty'] = export_df['Current Weekly Qty'].apply(lambda x: f"{x:.0f}")
-                export_df['Recommended Weekly Qty'] = export_df['Recommended Weekly Qty'].apply(lambda x: f"{x:.0f}")
-                export_df['Change %'] = export_df['Change %'].apply(lambda x: f"{x:+.1f}%")
-                export_df['Current Return %'] = export_df['Current Return %'].apply(lambda x: f"{x:.1f}%")
-                export_df['Expected Return %'] = export_df['Expected Return %'].apply(lambda x: f"{x:.1f}%")
-                export_df['Expected Improvement %'] = export_df['Expected Improvement %'].apply(lambda x: f"{x:.1f}%")
-                export_df['Confidence'] = export_df['Confidence'].apply(lambda x: f"{x*100:.0f}%")
-                
-                st.dataframe(export_df, use_container_width=True, hide_index=True)
-                
-                csv = export_df.to_csv(index=False)
-                
-                st.download_button(
-                    label="Download Action Plan as CSV",
-                    data=csv,
-                    file_name=f"order_recommendations_{selected_outlet}.csv",
-                    mime="text/csv"
-                )
+            st.write(f"Change: **No change**")
+    
+    # Expected impact
+    st.subheader("Expected Impact")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Return Rate Reduction", f"{branch_rec['expected_return_reduction']:.1f}%")
+        st.caption("Expected decrease in returns")
+    
+    with col2:
+        new_return_rate = branch_rec['current_return_rate'] - branch_rec['expected_return_reduction']
+        st.metric("New Return Rate", f"{new_return_rate:.1f}%")
+        st.caption("Projected return rate")
+    
+    with col3:
+        st.metric("Confidence Level", f"{branch_rec['confidence']:.0%}")
+        st.caption("Recommendation confidence")
+    
+    # Reasoning
+    st.subheader("Reasoning")
+    st.info(branch_rec['reasoning'])
+    
+    # Implementation steps
+    st.subheader("Implementation Steps")
+    
+    steps = [
+        f"1. **Adjust Order Quantity**: Change from {branch_rec['avg_quantity']:.0f} to {branch_rec['recommended_quantity']:.0f} units",
+        f"2. **Adjust Order Interval**: Change from {branch_rec['avg_interval']:.1f} to {branch_rec['recommended_interval']:.1f} days",
+        "3. **Monitor Performance**: Track return rates for 2-4 weeks",
+        "4. **Fine-tune**: Make additional adjustments based on actual results",
+        "5. **Document**: Record the new ordering pattern for future reference"
+    ]
+    
+    for step in steps:
+        st.write(step)
+    
+    # All branches comparison
+    st.subheader("All Branches Comparison")
+    
+    display_df = rec_df[['Branch Name', 'avg_quantity', 'recommended_quantity', 'current_return_rate', 'expected_return_reduction', 'confidence']].copy()
+    display_df.columns = ['Branch', 'Current Qty', 'Recommended Qty', 'Return Rate', 'Expected Reduction', 'Confidence']
+    
+    display_df['Current Qty'] = display_df['Current Qty'].apply(lambda x: f"{int(x)}")
+    display_df['Recommended Qty'] = display_df['Recommended Qty'].apply(lambda x: f"{int(x)}")
+    display_df['Return Rate'] = display_df['Return Rate'].apply(lambda x: f"{x:.1f}%")
+    display_df['Expected Reduction'] = display_df['Expected Reduction'].apply(lambda x: f"{x:.1f}%")
+    display_df['Confidence'] = display_df['Confidence'].apply(lambda x: f"{x:.0%}")
+    
+    display_df = display_df.sort_values('Return Rate', ascending=False)
+    
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    
+    st.caption("📊 Recommendations are based on October performance data and historical trends.")
