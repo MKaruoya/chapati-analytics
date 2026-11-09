@@ -197,28 +197,17 @@ def show():
     # Recommendations table
     st.subheader("Recommendations")
     
-    # Get current net sales for each branch
-    branch_net_sales = []
-    for branch in rec_df['Branch'].tolist():
-        branch_data = df[df['Branch'] == branch]
-        october_data = branch_data[branch_data['Week'].isin(october_weeks)]
-        net_sales = october_data['Net Sales'].sum()
-        branch_net_sales.append(net_sales)
-    
-    rec_df['Net Sales'] = branch_net_sales
-    
     # Create display dataframe
-    display_df = rec_df[['Branch Name', 'current_return_rate', 'avg_quantity', 'recommended_quantity', 'Net Sales', 'status', 'action', 'confidence']].copy()
-    display_df.columns = ['Branch', 'Return Rate', 'Current Qty', 'Recommended Qty', 'Net Sales', 'Status', 'Action', 'Confidence']
+    display_df = rec_df[['Branch Name', 'current_return_rate', 'avg_quantity', 'recommended_quantity', 'status', 'action', 'confidence']].copy()
+    display_df.columns = ['Branch', 'Return Rate', 'Current Qty', 'Recommended Qty', 'Status', 'Action', 'Confidence']
     
     display_df['Return Rate'] = display_df['Return Rate'].apply(lambda x: f"{x:.1f}%")
     display_df['Current Qty'] = display_df['Current Qty'].apply(lambda x: f"{int(x)}")
     display_df['Recommended Qty'] = display_df['Recommended Qty'].apply(lambda x: f"{int(x)}")
-    display_df['Net Sales'] = display_df['Net Sales'].apply(lambda x: f"{int(x):,}")
     display_df['Confidence'] = display_df['Confidence'].apply(lambda x: f"{x:.0%}")
     
     display_df = display_df.sort_values('Return Rate', ascending=False)
     
     st.dataframe(display_df, use_container_width=True, hide_index=True)
     
-    st.caption("📊 Recommendations based on October performance. Current Qty = average order quantity. Net Sales = total October net sales.")
+    st.caption("📊 Recommendations based on October performance. Current Qty = average weekly order quantity (gross sales).")
