@@ -21,7 +21,7 @@ def get_month_from_week(week):
     else:
         return 8  # October
 
-def calculate_recommendations(branch_data, full_branch_data):
+def calculate_recommendations(branch_data):
     """Calculate optimal order recommendations for a branch"""
     
     if len(branch_data) == 0:
@@ -45,62 +45,37 @@ def calculate_recommendations(branch_data, full_branch_data):
     else:
         avg_interval = 7
     
-    # Historical analysis (all months)
-    if len(full_branch_data) > 0:
-        historical_return_rate = (full_branch_data['Returns'].sum() / full_branch_data['Gross Sales'].sum() * 100) if full_branch_data['Gross Sales'].sum() > 0 else 0
-        
-        # Trend analysis
-        months = sorted(full_branch_data['Month'].unique())
-        if len(months) >= 2:
-            first_half = full_branch_data[full_branch_data['Month'].isin(months[:len(months)//2])]
-            second_half = full_branch_data[full_branch_data['Month'].isin(months[len(months)//2:])]
-            
-            first_rate = (first_half['Returns'].sum() / first_half['Gross Sales'].sum() * 100) if first_half['Gross Sales'].sum() > 0 else 0
-            second_rate = (second_half['Returns'].sum() / second_half['Gross Sales'].sum() * 100) if second_half['Gross Sales'].sum() > 0 else 0
-            
-            if second_rate < first_rate - 2:
-                trend = "Improving"
-            elif second_rate > first_rate + 2:
-                trend = "Worsening"
-            else:
-                trend = "Stable"
-        else:
-            trend = "Insufficient Data"
-    else:
-        historical_return_rate = current_return_rate
-        trend = "Insufficient Data"
-    
-    # Recommendations based on current return rate
+    # Recommendations based on October return rate ONLY
     if current_return_rate > 20:
+        recommended_quantity = avg_quantity * 0.80
+        recommended_interval = avg_interval * 1.2
+        expected_return_reduction = current_return_rate * 0.4
+        expected_sales_increase = 0
+        confidence = 0.80
+        status = "HIGH PRIORITY"
+        action = "Reduce Orders"
+    elif current_return_rate > 15:
         recommended_quantity = avg_quantity * 0.85
         recommended_interval = avg_interval * 1.1
         expected_return_reduction = current_return_rate * 0.3
         expected_sales_increase = 0
-        confidence = 0.75 if trend == "Improving" else 0.65
-        status = "HIGH PRIORITY"
-        action = "Reduce Orders"
-    elif current_return_rate > 15:
-        recommended_quantity = avg_quantity * 0.90
-        recommended_interval = avg_interval * 1.05
-        expected_return_reduction = current_return_rate * 0.2
-        expected_sales_increase = 0
-        confidence = 0.75 if trend == "Improving" else 0.65
+        confidence = 0.75
         status = "MODERATE"
         action = "Adjust Orders"
     elif current_return_rate > 10:
         recommended_quantity = avg_quantity * 0.95
-        recommended_interval = avg_interval * 0.95
-        expected_return_reduction = current_return_rate * 0.1
+        recommended_interval = avg_interval * 1.0
+        expected_return_reduction = current_return_rate * 0.2
         expected_sales_increase = 0
-        confidence = 0.70 if trend == "Improving" else 0.60
+        confidence = 0.70
         status = "WATCH"
         action = "Fine-tune Orders"
     else:
-        recommended_quantity = avg_quantity * 1.15
-        recommended_interval = avg_interval * 0.90
+        recommended_quantity = avg_quantity * 1.20
+        recommended_interval = avg_interval * 0.85
         expected_return_reduction = 0
-        expected_sales_increase = 12
-        confidence = 0.90 if trend == "Improving" else 0.80
+        expected_sales_increase = 15
+        confidence = 0.85
         status = "EXCELLENT"
         action = "Increase Orders"
     
@@ -110,8 +85,6 @@ def calculate_recommendations(branch_data, full_branch_data):
         'avg_interval': avg_interval,
         'recommended_interval': recommended_interval,
         'current_return_rate': current_return_rate,
-        'historical_return_rate': historical_return_rate,
-        'trend': trend,
         'expected_return_reduction': expected_return_reduction,
         'expected_sales_increase': expected_sales_increase,
         'confidence': confidence,
@@ -189,7 +162,7 @@ def show():
         if len(october_data) == 0:
             continue
         
-        rec = calculate_recommendations(october_data, branch_data)
+        rec = calculate_recommendations(october_data)
         
         if rec:
             rec['Branch'] = branch
@@ -226,8 +199,8 @@ def show():
     st.subheader("Recommendations")
     
     # Create display dataframe
-    display_df = rec_df[['Branch Name', 'current_return_rate', 'trend', 'avg_quantity', 'recommended_quantity', 'status', 'action', 'confidence']].copy()
-    display_df.columns = ['Branch', 'Return Rate', 'Trend', 'Current Qty', 'Recommended Qty', 'Status', 'Action', 'Confidence']
+    display_df = rec_df[['Branch Name', 'current_return_rate', 'avg_quantity', 'recommended_quantity', 'status', 'action', 'confidence']].copy()
+    display_df.columns = ['Branch', 'Return Rate', 'Current Qty', 'Recommended Qty', 'Status', 'Action', 'Confidence']
     
     display_df['Return Rate'] = display_df['Return Rate'].apply(lambda x: f"{x:.1f}%")
     display_df['Current Qty'] = display_df['Current Qty'].apply(lambda x: f"{int(x)}")
@@ -238,4 +211,4 @@ def show():
     
     st.dataframe(display_df, use_container_width=True, hide_index=True)
     
-    st.caption("📊 Recommendations based on October performance and historical trends (March-October). Considers return rate trends and seasonality.")
+    st.caption("📊 Recommendations based on October performance only.")
