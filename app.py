@@ -7,10 +7,19 @@ st.set_page_config(page_title="Chapati Analytics", layout="wide")
 
 styles.apply_styles()
 
+# Load data
+if 'data' not in st.session_state:
+    try:
+        df = pd.read_csv('data/october_weekly_correct.csv')
+        st.session_state.data = df
+    except FileNotFoundError:
+        st.session_state.data = None
+
+# Main title
 st.title("Chapati Analytics")
 st.caption("Data-driven order optimization for retail distribution")
 
-# Sidebar Navigation
+# Navigation
 st.sidebar.header("Navigation")
 
 page = st.sidebar.radio(
@@ -18,16 +27,6 @@ page = st.sidebar.radio(
     ["Upload Data", "Dashboard", "Store Analysis"],
     label_visibility="collapsed"
 )
-
-# Load data
-if 'data' not in st.session_state:
-    try:
-        # Load October data (corrected - all weeks with complete data)
-        df = pd.read_csv('data/october_weekly_correct.csv')
-        st.session_state.data = df
-    except FileNotFoundError:
-        st.warning("October data not found. Please upload data first.")
-        st.session_state.data = None
 
 # Route to pages
 if page == "Upload Data":
