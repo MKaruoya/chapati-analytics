@@ -60,52 +60,47 @@ def calculate_recommendations(branch_data, full_branch_data):
             
             if second_rate < first_rate - 2:
                 trend = "Improving"
-                trend_factor = 0.95
             elif second_rate > first_rate + 2:
                 trend = "Worsening"
-                trend_factor = 1.05
             else:
                 trend = "Stable"
-                trend_factor = 1.0
         else:
             trend = "Insufficient Data"
-            trend_factor = 1.0
     else:
         historical_return_rate = current_return_rate
         trend = "Insufficient Data"
-        trend_factor = 1.0
     
-    # Recommendations based on current return rate + historical trend
+    # Recommendations based on current return rate
     if current_return_rate > 20:
-        recommended_quantity = avg_quantity * 0.85 * trend_factor
+        recommended_quantity = avg_quantity * 0.85
         recommended_interval = avg_interval * 1.1
         expected_return_reduction = current_return_rate * 0.3
         expected_sales_increase = 0
-        confidence = 0.75
+        confidence = 0.75 if trend == "Improving" else 0.65
         status = "HIGH PRIORITY"
         action = "Reduce Orders"
     elif current_return_rate > 15:
-        recommended_quantity = avg_quantity * 0.90 * trend_factor
+        recommended_quantity = avg_quantity * 0.90
         recommended_interval = avg_interval * 1.05
         expected_return_reduction = current_return_rate * 0.2
         expected_sales_increase = 0
-        confidence = 0.70
+        confidence = 0.75 if trend == "Improving" else 0.65
         status = "MODERATE"
         action = "Adjust Orders"
     elif current_return_rate > 10:
-        recommended_quantity = avg_quantity * 0.95 * trend_factor
+        recommended_quantity = avg_quantity * 0.95
         recommended_interval = avg_interval * 0.95
         expected_return_reduction = current_return_rate * 0.1
         expected_sales_increase = 0
-        confidence = 0.65
+        confidence = 0.70 if trend == "Improving" else 0.60
         status = "WATCH"
         action = "Fine-tune Orders"
     else:
-        recommended_quantity = avg_quantity * 1.15 * trend_factor
+        recommended_quantity = avg_quantity * 1.15
         recommended_interval = avg_interval * 0.90
         expected_return_reduction = 0
         expected_sales_increase = 12
-        confidence = 0.85
+        confidence = 0.90 if trend == "Improving" else 0.80
         status = "EXCELLENT"
         action = "Increase Orders"
     
