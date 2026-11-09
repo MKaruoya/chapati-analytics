@@ -298,7 +298,7 @@ def show():
                 final_df = final_df.sort_values('Return Rate', ascending=False)
                 
                 # Apply color coding to Status column
-                styled_df = final_df.style.applymap(color_status_cell, subset=['Status'])
+                styled_df = final_df.style.map(color_status_cell, subset=['Status'])
                 st.dataframe(styled_df, use_container_width=True, hide_index=True)
                 
                 st.caption("📊 All figures are sums of available October weeks (Weeks 41-44). 'Weeks' column shows data coverage (e.g., 2/4 means 2 weeks of data available).")
@@ -369,5 +369,5 @@ def show():
                 final_df = final_df.sort_values('Return Rate', ascending=False)
                 
                 # Apply color coding to Status column
-                styled_df = final_df.style.applymap(color_status_cell, subset=['Status'])
+                styled_df = final_df.style.map(color_status_cell, subset=['Status'])
                 st.dataframe(styled_df, use_container_width=True, hide_index=True)
