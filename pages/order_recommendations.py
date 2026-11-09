@@ -47,45 +47,45 @@ def calculate_recommendations(branch_data):
     
     # Recommendations based on October return rate
     if current_return_rate > 30:
-        # CRITICAL - reduce significantly
-        recommended_quantity = avg_quantity * 0.60
-        recommended_interval = avg_interval * 1.5
-        expected_return_reduction = current_return_rate * 0.5
+        # CRITICAL - reduce quantity slightly
+        recommended_quantity = avg_quantity * 0.85
+        recommended_interval = avg_interval
+        expected_return_reduction = current_return_rate * 0.3
         expected_sales_increase = 0
         confidence = 0.85
         status = "CRITICAL"
-        action = "Reduce Orders Significantly"
+        action = "Reduce Quantity"
     elif current_return_rate > 20:
-        # HIGH - reduce
-        recommended_quantity = avg_quantity * 0.70
-        recommended_interval = avg_interval * 1.3
-        expected_return_reduction = current_return_rate * 0.4
+        # HIGH - reduce quantity slightly
+        recommended_quantity = avg_quantity * 0.88
+        recommended_interval = avg_interval
+        expected_return_reduction = current_return_rate * 0.25
         expected_sales_increase = 0
         confidence = 0.80
         status = "HIGH PRIORITY"
-        action = "Reduce Orders"
+        action = "Reduce Quantity"
     elif current_return_rate > 15:
-        # MODERATE - reduce slightly
-        recommended_quantity = avg_quantity * 0.85
-        recommended_interval = avg_interval * 1.1
-        expected_return_reduction = current_return_rate * 0.3
+        # MODERATE - small reduction
+        recommended_quantity = avg_quantity * 0.92
+        recommended_interval = avg_interval
+        expected_return_reduction = current_return_rate * 0.2
         expected_sales_increase = 0
         confidence = 0.75
         status = "MODERATE"
-        action = "Reduce Orders"
+        action = "Reduce Quantity"
     elif current_return_rate > 10:
         # WATCH - maintain
         recommended_quantity = avg_quantity * 1.00
-        recommended_interval = avg_interval * 1.0
-        expected_return_reduction = current_return_rate * 0.2
+        recommended_interval = avg_interval
+        expected_return_reduction = current_return_rate * 0.1
         expected_sales_increase = 0
         confidence = 0.70
         status = "WATCH"
         action = "Maintain Orders"
     else:
-        # EXCELLENT - increase to boost sales
+        # EXCELLENT - increase quantity
         recommended_quantity = avg_quantity * 1.15
-        recommended_interval = avg_interval * 0.90
+        recommended_interval = avg_interval
         expected_return_reduction = 0
         expected_sales_increase = 12
         confidence = 0.85
@@ -228,4 +228,4 @@ def show():
     
     st.dataframe(display_df, use_container_width=True, hide_index=True)
     
-    st.caption("📊 Qty/Week = average weekly order quantity. Total Oct = estimated total for 4 weeks. Recommendations reduce orders for high returns, increase for low returns.")
+    st.caption("📊 Qty/Week = average weekly order quantity. Total Oct = estimated total for 4 weeks. High returns = reduce slightly. Low returns = increase to boost sales.")
