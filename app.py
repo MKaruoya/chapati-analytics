@@ -1,7 +1,7 @@
 ﻿import streamlit as st
 import pandas as pd
 import styles
-from pages import upload, dashboard, store_analysis
+from pages import upload, dashboard, store_analysis, order_recommendations
 
 st.set_page_config(page_title="Chapati Analytics", layout="wide")
 
@@ -24,7 +24,7 @@ st.sidebar.header("Navigation")
 
 page = st.sidebar.radio(
     "Select Page",
-    ["Upload Data", "Dashboard", "Store Analysis"],
+    ["Upload Data", "Dashboard", "Store Analysis", "Order Recommendations"],
     label_visibility="collapsed"
 )
 
@@ -35,6 +35,8 @@ elif page == "Dashboard":
     dashboard.show()
 elif page == "Store Analysis":
     store_analysis.show()
+elif page == "Order Recommendations":
+    order_recommendations.show()
 
 # Footer
 st.sidebar.markdown("---")
