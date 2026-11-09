@@ -167,107 +167,192 @@ def show():
     # Create metrics dataframe
     metrics_df = pd.DataFrame(branch_metrics)
     
-    # Display overview metrics
-    st.subheader("October Performance Summary")
-    col1, col2, col3, col4 = st.columns(4)
+    # Separate normal branches from negative sales branches
+    normal_branches = metrics_df[metrics_df['Net Sales'] >= 0].copy()
+    negative_branches = metrics_df[metrics_df['Net Sales'] < 0].copy()
     
-    with col1:
-        st.metric("Total Branches", len(metrics_df))
+    # Create tabs
+    tab1, tab2 = st.tabs(["Normal Sales", "Negative Sales (High Returns)"])
     
-    with col2:
-        avg_return = metrics_df['Return Rate'].mean()
-        st.metric("Average Return Rate", f"{avg_return:.1f}%")
+    # ===== TAB 1: NORMAL SALES =====
+    with tab1:
+        if len(normal_branches) == 0:
+            st.info("No branches with normal sales")
+        else:
+            # Display overview metrics
+            st.subheader("October Performance Summary")
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Total Branches", len(normal_branches))
+            
+            with col2:
+                avg_return = normal_branches['Return Rate'].mean()
+                st.metric("Average Return Rate", f"{avg_return:.1f}%")
+            
+            with col3:
+                critical_count = len(normal_branches[normal_branches['Status'].isin(['CRITICAL', 'HIGH'])])
+                st.metric("High Risk Branches", critical_count)
+            
+            with col4:
+                improving_count = len(normal_branches[normal_branches['Trend'] == 'Improving'])
+                st.metric("Improving", improving_count)
+            
+            # Branch Performance Chart
+            st.subheader("October Return Rate by Branch")
+            st.caption("Sorted by return rate (highest to lowest) - Sum of all October weeks")
+            
+            sorted_df = normal_branches.sort_values('Return Rate', ascending=False)
+            colors = [get_status_color(status) for status in sorted_df['Status']]
+            
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=sorted_df['Branch'],
+                y=sorted_df['Return Rate'],
+                marker=dict(color=colors, line=dict(color='#2c3e50', width=1)),
+                text=sorted_df['Return Rate'].apply(lambda x: f"{x:.1f}%"),
+                textposition='auto',
+                hovertemplate='<b>%{x}</b><br>Return Rate: %{y:.1f}%<extra></extra>'
+            ))
+            
+            fig.update_layout(
+                title="October Return Rate Analysis (Normal Sales)",
+                height=500,
+                xaxis_tickangle=-45,
+                showlegend=False,
+                font=dict(size=11),
+                yaxis_title="Return Rate (%)",
+                hovermode='x unified'
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Trend Analysis
+            st.subheader("Return Rate Trends")
+            st.caption("Comparison of first 4 months (March-June) vs last 4 months (July-October)")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                improving = len(normal_branches[normal_branches['Trend'] == 'Improving'])
+                st.metric("Improving", improving)
+                st.caption("Return rates decreasing")
+            
+            with col2:
+                stable = len(normal_branches[normal_branches['Trend'] == 'Stable'])
+                st.metric("Stable", stable)
+                st.caption("Return rates unchanged")
+            
+            with col3:
+                worsening = len(normal_branches[normal_branches['Trend'] == 'Worsening'])
+                st.metric("Worsening", worsening)
+                st.caption("Return rates increasing")
+            
+            # Status Legend
+            st.subheader("Status Classification")
+            col1, col2, col3, col4, col5 = st.columns(5)
+            
+            with col1:
+                st.markdown("<span style='color: #dc3545; font-weight: bold;'>CRITICAL</span><br>Return rate > 30%", unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown("<span style='color: #fd7e14; font-weight: bold;'>HIGH</span><br>Return rate 20-30%", unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown("<span style='color: #ffc107; font-weight: bold;'>MODERATE</span><br>Return rate 15-20%", unsafe_allow_html=True)
+            
+            with col4:
+                st.markdown("<span style='color: #ffc107; font-weight: bold;'>WATCH</span><br>Return rate 10-15%", unsafe_allow_html=True)
+            
+            with col5:
+                st.markdown("<span style='color: #28a745; font-weight: bold;'>GOOD</span><br>Return rate < 10%", unsafe_allow_html=True)
+            
+            # Detailed Data Table
+            with st.expander("View Detailed Branch Data - October Summary"):
+                display_df = normal_branches.copy()
+                display_df['Branch Name'] = display_df['Branch'].apply(lambda x: x.split('-')[-1].strip() if '-' in x else x)
+                
+                final_df = display_df[['Branch Name', 'Gross Sales', 'Returns', 'Net Sales', 'Return Rate', 'Trend', 'Status', 'Weeks']].copy()
+                final_df['Gross Sales'] = final_df['Gross Sales'].apply(lambda x: f"{int(x):,}")
+                final_df['Returns'] = final_df['Returns'].apply(lambda x: f"{int(x):,}")
+                final_df['Net Sales'] = final_df['Net Sales'].apply(lambda x: f"{int(x):,}")
+                final_df['Return Rate'] = final_df['Return Rate'].apply(lambda x: f"{x:.1f}%")
+                final_df['Weeks'] = final_df['Weeks'].apply(lambda x: f"{int(x)}/4")
+                final_df = final_df.sort_values('Return Rate', ascending=False)
+                
+                st.dataframe(final_df, use_container_width=True, hide_index=True)
+                
+                st.caption("📊 All figures are sums of available October weeks (Weeks 41-44). 'Weeks' column shows data coverage (e.g., 2/4 means 2 weeks of data available).")
     
-    with col3:
-        critical_count = len(metrics_df[metrics_df['Status'].isin(['CRITICAL', 'HIGH'])])
-        st.metric("High Risk Branches", critical_count)
-    
-    with col4:
-        improving_count = len(metrics_df[metrics_df['Trend'] == 'Improving'])
-        st.metric("Improving", improving_count)
-    
-    # Branch Performance Chart
-    st.subheader("October Return Rate by Branch")
-    st.caption("Sorted by return rate (highest to lowest) - Sum of all October weeks")
-    
-    sorted_df = metrics_df.sort_values('Return Rate', ascending=False)
-    colors = [get_status_color(status) for status in sorted_df['Status']]
-    
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=sorted_df['Branch'],
-        y=sorted_df['Return Rate'],
-        marker=dict(color=colors, line=dict(color='#2c3e50', width=1)),
-        text=sorted_df['Return Rate'].apply(lambda x: f"{x:.1f}%"),
-        textposition='auto',
-        hovertemplate='<b>%{x}</b><br>Return Rate: %{y:.1f}%<extra></extra>'
-    ))
-    
-    fig.update_layout(
-        title="October Return Rate Analysis (Sum of all weeks)",
-        height=500,
-        xaxis_tickangle=-45,
-        showlegend=False,
-        font=dict(size=11),
-        yaxis_title="Return Rate (%)",
-        hovermode='x unified'
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Trend Analysis
-    st.subheader("Return Rate Trends")
-    st.caption("Comparison of first 4 months (March-June) vs last 4 months (July-October)")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        improving = len(metrics_df[metrics_df['Trend'] == 'Improving'])
-        st.metric("Improving", improving)
-        st.caption("Return rates decreasing")
-    
-    with col2:
-        stable = len(metrics_df[metrics_df['Trend'] == 'Stable'])
-        st.metric("Stable", stable)
-        st.caption("Return rates unchanged")
-    
-    with col3:
-        worsening = len(metrics_df[metrics_df['Trend'] == 'Worsening'])
-        st.metric("Worsening", worsening)
-        st.caption("Return rates increasing")
-    
-    # Status Legend
-    st.subheader("Status Classification")
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        st.markdown("<span style='color: #dc3545; font-weight: bold;'>CRITICAL</span><br>Return rate > 30%", unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("<span style='color: #fd7e14; font-weight: bold;'>HIGH</span><br>Return rate 20-30%", unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown("<span style='color: #ffc107; font-weight: bold;'>MODERATE</span><br>Return rate 15-20%", unsafe_allow_html=True)
-    
-    with col4:
-        st.markdown("<span style='color: #ffc107; font-weight: bold;'>WATCH</span><br>Return rate 10-15%", unsafe_allow_html=True)
-    
-    with col5:
-        st.markdown("<span style='color: #28a745; font-weight: bold;'>GOOD</span><br>Return rate < 10%", unsafe_allow_html=True)
-    
-    # Detailed Data Table
-    with st.expander("View Detailed Branch Data - October Summary"):
-        display_df = metrics_df.copy()
-        display_df['Branch Name'] = display_df['Branch'].apply(lambda x: x.split('-')[-1].strip() if '-' in x else x)
-        
-        final_df = display_df[['Branch Name', 'Gross Sales', 'Returns', 'Net Sales', 'Return Rate', 'Trend', 'Status', 'Weeks']].copy()
-        final_df['Gross Sales'] = final_df['Gross Sales'].apply(lambda x: f"{int(x):,}")
-        final_df['Returns'] = final_df['Returns'].apply(lambda x: f"{int(x):,}")
-        final_df['Net Sales'] = final_df['Net Sales'].apply(lambda x: f"{int(x):,}")
-        final_df['Return Rate'] = final_df['Return Rate'].apply(lambda x: f"{x:.1f}%")
-        final_df['Weeks'] = final_df['Weeks'].apply(lambda x: f"{int(x)}/4")
-        final_df = final_df.sort_values('Return Rate', ascending=False)
-        
-        st.dataframe(final_df, use_container_width=True, hide_index=True)
-        
-        st.caption("📊 All figures are sums of available October weeks (Weeks 41-44). 'Weeks' column shows data coverage (e.g., 2/4 means 2 weeks of data available).")
+    # ===== TAB 2: NEGATIVE SALES =====
+    with tab2:
+        if len(negative_branches) == 0:
+            st.success("✅ No branches with negative sales!")
+        else:
+            st.warning(f"⚠️ **{len(negative_branches)} branches with NEGATIVE NET SALES**\n\n" +
+                      "These branches are returning MORE than they ordered.\n" +
+                      "This indicates serious quality or demand issues.")
+            
+            # Overview
+            st.subheader("Negative Sales Summary")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Branches", len(negative_branches))
+            
+            with col2:
+                avg_return = negative_branches['Return Rate'].mean()
+                st.metric("Average Return Rate", f"{avg_return:.1f}%")
+            
+            with col3:
+                total_negative = negative_branches['Net Sales'].sum()
+                st.metric("Total Negative Sales", f"{int(total_negative):,}")
+            
+            # Chart
+            st.subheader("Negative Sales Branches")
+            
+            sorted_neg = negative_branches.sort_values('Net Sales')
+            
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=sorted_neg['Branch'],
+                y=sorted_neg['Net Sales'],
+                marker=dict(color='#dc3545', line=dict(color='#721c24', width=1)),
+                text=sorted_neg['Net Sales'].apply(lambda x: f"{int(x)}"),
+                textposition='auto',
+                hovertemplate='<b>%{x}</b><br>Net Sales: %{y}<extra></extra>'
+            ))
+            
+            fig.update_layout(
+                title="Negative Net Sales (Returns > Orders)",
+                height=500,
+                xaxis_tickangle=-45,
+                showlegend=False,
+                font=dict(size=11),
+                yaxis_title="Net Sales (units)",
+                hovermode='x unified'
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Detailed table
+            with st.expander("View Detailed Negative Sales Data"):
+                display_df = negative_branches.copy()
+                display_df['Branch Name'] = display_df['Branch'].apply(lambda x: x.split('-')[-1].strip() if '-' in x else x)
+                
+                final_df = display_df[['Branch Name', 'Gross Sales', 'Returns', 'Net Sales', 'Return Rate', 'Status', 'Weeks']].copy()
+                final_df['Gross Sales'] = final_df['Gross Sales'].apply(lambda x: f"{int(x):,}")
+                final_df['Returns'] = final_df['Returns'].apply(lambda x: f"{int(x):,}")
+                final_df['Net Sales'] = final_df['Net Sales'].apply(lambda x: f"{int(x):,}")
+                final_df['Return Rate'] = final_df['Return Rate'].apply(lambda x: f"{x:.1f}%")
+                final_df['Weeks'] = final_df['Weeks'].apply(lambda x: f"{int(x)}/4")
+                final_df = final_df.sort_values('Return Rate', ascending=False)
+                
+                st.dataframe(final_df, use_container_width=True, hide_index=True)
+            
+            st.error("🚨 **ACTION REQUIRED**\n\n" +
+                    "These branches need immediate investigation:\n" +
+                    "- Quality issues with products?\n" +
+                    "- Storage/handling problems?\n" +
+                    "- Demand mismatch?\n" +
+                    "- Ordering errors?")
