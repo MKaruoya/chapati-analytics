@@ -34,15 +34,19 @@ def show():
     # Add month column
     df['Month'] = df['Week'].apply(get_month_from_week)
     
-    # Get all valid branches
-    all_names = df['Branch'].dropna().unique()
+    # Filter for October data only
+    october_weeks = [41, 42, 43, 44]
+    df_october = df[df['Week'].isin(october_weeks)]
+    
+    # Get branches with October data only
+    all_names = df_october['Branch'].dropna().unique()
     branches = [
         name for name in all_names 
         if isinstance(name, str) and len(name) > 0
     ]
     
     if not branches:
-        st.error("No valid branches found")
+        st.error("No branches with October data found")
         return
     
     # Branch selector
@@ -94,20 +98,6 @@ def show():
         st.error("No data available for this branch")
         return
     
-    # Check if branch has October data
-    october_data_check = branch_data[branch_data['Month'] == 8]
-    has_october = len(october_data_check) > 0
-    
-    if not has_october:
-        st.error("❌ This branch has NO October data")
-        st.info("This branch did not report data for October (Weeks 41-44).")
-        
-        if len(monthly_df) > 0:
-            st.subheader("Historical Data (March - September)")
-            monthly_df = monthly_df[monthly_df['Month'] != 8]
-        else:
-            return
-    
     # Performance Summary
     st.subheader("Performance Summary")
     col1, col2, col3, col4 = st.columns(4)
@@ -118,9 +108,8 @@ def show():
     total_returns = monthly_df['Returns'].sum()
     
     with col1:
-        month_label = "October" if has_october else f"M{int(current_month['Month'])}"
-        st.metric(f"{month_label} Return Rate", f"{current_month['Return Rate']:.1f}%")
-        st.caption("Latest month")
+        st.metric("October Return Rate", f"{current_month['Return Rate']:.1f}%")
+        st.caption("Current month")
     
     with col2:
         st.metric("Average Return Rate", f"{avg_return:.1f}%")
@@ -136,7 +125,7 @@ def show():
     
     # Monthly Trend Chart
     st.subheader("Monthly Return Rate Trend")
-    st.caption("Return rate progression")
+    st.caption("Return rate progression from March to October")
     
     month_labels = [f"M{int(m)}" for m in monthly_df['Month']]
     
@@ -280,7 +269,7 @@ def show():
     st.markdown(f"""
     <div style='background: #f8f9fa; padding: 1.5rem; border-left: 4px solid {status_color}; border-radius: 4px;'>
         <b style='color: {status_color}; font-size: 18px;'>{status_text}</b><br>
-        Latest Return Rate: {current_month['Return Rate']:.1f}% | Trend: {trend}
+        October Return Rate: {current_month['Return Rate']:.1f}% | Trend: {trend}
     </div>
     """, unsafe_allow_html=True)
     
@@ -302,91 +291,72 @@ def show():
     
     with tab2:
         st.subheader("Weekly Data")
+        st.caption("October weekly sales and returns")
         
-        if not has_october:
-            st.info("📊 No October weekly data available for this branch.")
-            
-            # Show latest available data instead
-            latest_week = branch_data['Week'].max()
-            latest_data = branch_data[branch_data['Week'] == latest_week]
-            
-            if len(latest_data) > 0:
-                st.subheader("Latest Available Data")
-                st.caption(f"Last reported: Week {int(latest_week)}")
-                display_latest = latest_data[['Week', 'Gross Sales', 'Returns', 'Net Sales', 'Return Rate']].copy()
-                display_latest['Gross Sales'] = display_latest['Gross Sales'].apply(lambda x: f"{int(x):,}")
-                display_latest['Returns'] = display_latest['Returns'].apply(lambda x: f"{int(x):,}")
-                display_latest['Net Sales'] = display_latest['Net Sales'].apply(lambda x: f"{int(x):,}")
-                display_latest['Return Rate'] = display_latest['Return Rate'].apply(lambda x: f"{x:.1f}%")
-                st.dataframe(display_latest, use_container_width=True, hide_index=True)
+        # Get October weekly data
+        october_data = branch_data[branch_data['Week'].isin(october_weeks)].copy()
+        
+        if len(october_data) == 0:
+            st.info("No October weekly data available")
         else:
-            st.caption("October weekly sales and returns")
+            # Weekly Return Rate Trend Chart
+            fig_weekly_trend = go.Figure()
             
-            # Get October weekly data
-            october_weeks = [41, 42, 43, 44]
-            october_data = branch_data[branch_data['Week'].isin(october_weeks)].copy()
+            fig_weekly_trend.add_trace(go.Scatter(
+                x=october_data['Week'],
+                y=october_data['Return Rate'],
+                mode='lines+markers',
+                name='Return Rate',
+                line=dict(color='#9b59b6', width=2),
+                marker=dict(size=6)
+            ))
             
-            if len(october_data) == 0:
-                st.info("No October weekly data available")
-            else:
-                # Weekly Return Rate Trend Chart
-                fig_weekly_trend = go.Figure()
-                
-                fig_weekly_trend.add_trace(go.Scatter(
-                    x=october_data['Week'],
-                    y=october_data['Return Rate'],
-                    mode='lines+markers',
-                    name='Return Rate',
-                    line=dict(color='#9b59b6', width=2),
-                    marker=dict(size=6)
-                ))
-                
-                fig_weekly_trend.update_layout(
-                    title="October Weekly Return Rate Trend",
-                    xaxis_title="Week",
-                    yaxis_title="Return Rate (%)",
-                    hovermode='x unified',
-                    height=400,
-                    font=dict(size=11),
-                    showlegend=False
-                )
-                
-                st.plotly_chart(fig_weekly_trend, use_container_width=True)
-                
-                # Weekly Sales vs Returns Chart
-                fig_weekly_comparison = go.Figure()
-                
-                fig_weekly_comparison.add_trace(go.Bar(
-                    x=october_data['Week'],
-                    y=october_data['Gross Sales'],
-                    name='Gross Sales',
-                    marker_color='#3498db'
-                ))
-                
-                fig_weekly_comparison.add_trace(go.Bar(
-                    x=october_data['Week'],
-                    y=october_data['Returns'],
-                    name='Returns',
-                    marker_color='#e74c3c'
-                ))
-                
-                fig_weekly_comparison.update_layout(
-                    title="October Weekly Sales and Returns",
-                    xaxis_title="Week",
-                    yaxis_title="Volume",
-                    barmode='group',
-                    height=400,
-                    font=dict(size=11),
-                    hovermode='x unified'
-                )
-                
-                st.plotly_chart(fig_weekly_comparison, use_container_width=True)
-                
-                # Weekly data table
-                display_weekly = october_data[['Week', 'Gross Sales', 'Returns', 'Net Sales', 'Return Rate']].copy()
-                display_weekly['Gross Sales'] = display_weekly['Gross Sales'].apply(lambda x: f"{int(x):,}")
-                display_weekly['Returns'] = display_weekly['Returns'].apply(lambda x: f"{int(x):,}")
-                display_weekly['Net Sales'] = display_weekly['Net Sales'].apply(lambda x: f"{int(x):,}")
-                display_weekly['Return Rate'] = display_weekly['Return Rate'].apply(lambda x: f"{x:.1f}%")
-                
-                st.dataframe(display_weekly, use_container_width=True, hide_index=True)
+            fig_weekly_trend.update_layout(
+                title="October Weekly Return Rate Trend",
+                xaxis_title="Week",
+                yaxis_title="Return Rate (%)",
+                hovermode='x unified',
+                height=400,
+                font=dict(size=11),
+                showlegend=False
+            )
+            
+            st.plotly_chart(fig_weekly_trend, use_container_width=True)
+            
+            # Weekly Sales vs Returns Chart
+            fig_weekly_comparison = go.Figure()
+            
+            fig_weekly_comparison.add_trace(go.Bar(
+                x=october_data['Week'],
+                y=october_data['Gross Sales'],
+                name='Gross Sales',
+                marker_color='#3498db'
+            ))
+            
+            fig_weekly_comparison.add_trace(go.Bar(
+                x=october_data['Week'],
+                y=october_data['Returns'],
+                name='Returns',
+                marker_color='#e74c3c'
+            ))
+            
+            fig_weekly_comparison.update_layout(
+                title="October Weekly Sales and Returns",
+                xaxis_title="Week",
+                yaxis_title="Volume",
+                barmode='group',
+                height=400,
+                font=dict(size=11),
+                hovermode='x unified'
+            )
+            
+            st.plotly_chart(fig_weekly_comparison, use_container_width=True)
+            
+            # Weekly data table
+            display_weekly = october_data[['Week', 'Gross Sales', 'Returns', 'Net Sales', 'Return Rate']].copy()
+            display_weekly['Gross Sales'] = display_weekly['Gross Sales'].apply(lambda x: f"{int(x):,}")
+            display_weekly['Returns'] = display_weekly['Returns'].apply(lambda x: f"{int(x):,}")
+            display_weekly['Net Sales'] = display_weekly['Net Sales'].apply(lambda x: f"{int(x):,}")
+            display_weekly['Return Rate'] = display_weekly['Return Rate'].apply(lambda x: f"{x:.1f}%")
+            
+            st.dataframe(display_weekly, use_container_width=True, hide_index=True)
