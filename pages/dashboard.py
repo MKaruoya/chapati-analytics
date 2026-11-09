@@ -187,8 +187,11 @@ def show():
                 st.metric("Total Branches", len(normal_branches))
             
             with col2:
-                avg_return = normal_branches['Return Rate'].mean()
-                st.metric("Average Return Rate", f"{avg_return:.1f}%")
+                # Calculate TRUE overall return rate (not average of branches)
+                total_gross = normal_branches['Gross Sales'].sum()
+                total_returns = normal_branches['Returns'].sum()
+                true_return_rate = (total_returns / total_gross * 100) if total_gross > 0 else 0
+                st.metric("Overall Return Rate", f"{true_return_rate:.1f}%")
             
             with col3:
                 critical_count = len(normal_branches[normal_branches['Status'].isin(['CRITICAL', 'HIGH'])])
@@ -301,8 +304,11 @@ def show():
                 st.metric("Branches", len(negative_branches))
             
             with col2:
-                avg_return = negative_branches['Return Rate'].mean()
-                st.metric("Average Return Rate", f"{avg_return:.1f}%")
+                # Calculate TRUE overall return rate for negative branches
+                total_gross = negative_branches['Gross Sales'].sum()
+                total_returns = negative_branches['Returns'].sum()
+                true_return_rate = (total_returns / total_gross * 100) if total_gross > 0 else 0
+                st.metric("Overall Return Rate", f"{true_return_rate:.1f}%")
             
             with col3:
                 total_negative = negative_branches['Net Sales'].sum()
